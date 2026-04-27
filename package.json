@@ -1,0 +1,28 @@
+{
+  "name": "mr-king",
+  "private": true,
+  "packageManager": "npm@11.4.2",
+  "description": "Custom Restaurant ERP Monorepo",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "clean": "turbo clean && rm -rf node_modules",
+    "install:all": "npm install"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "prettier": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
