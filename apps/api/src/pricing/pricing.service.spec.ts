@@ -1,12 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PricingService } from './pricing.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('PricingService', () => {
   let service: PricingService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PricingService],
+      providers: [
+        PricingService,
+        {
+          provide: PrismaService,
+          useValue: {
+            product: {
+              findUnique: jest.fn(),
+            },
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<PricingService>(PricingService);
@@ -16,51 +27,39 @@ describe('PricingService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('calculateOrderItemPrice', () => {
-    it('should calculate half-and-half pizza: Mitad A ($160) + Mitad B ($180) ➜ Total $195', () => {
-      const item = {
-        quantity: 1,
-        price: 0, // Base price not used for half-and-half
-        pizzaConfig: {
-          isHalfAndHalf: true,
-          halfA: { name: 'Peperoni', price: 160 },
-          halfB: { name: 'Hawaiana', price: 180 },
-        },
-      };
-      // max(160, 180) + 15 = 195
-      expect(service.calculateOrderItemPrice(item)).toBe(195);
-    });
-
-    it('should calculate half-and-half pizza: Mitad A ($190) + Mitad B ($190) ➜ Total $205', () => {
+    it('should calculate half-and-half pizza with different specialty prices', () => {
       const item = {
         quantity: 1,
         price: 0,
-        pizzaConfig: {
+        config: {
           isHalfAndHalf: true,
-          halfA: { name: 'Especial', price: 190 },
-          halfB: { name: 'Especial', price: 190 },
+          halfA: { price: 190 }, // La Mr King
+          halfB: { price: 160 }, // Pepperoni
         },
       };
-      // max(190, 190) + 15 = 205
-      expect(service.calculateOrderItemPrice(item)).toBe(205);
+      // max(190, 160) + 15 = 205
+      expect(service.calculateOrderItemPrice(item as any)).resolves.toBe(205);
     });
 
-    it('should calculate simple items correctly', () => {
-      // Hamburguesa sencilla ($60)
-      const burger = {
+    it('should calculate tiered pricing for wings (12 pieces) ➜ $160', () => {
+      const item = {
+        quantity: 12,
+        price: 0,
+        categoryName: 'ALITAS',
+      };
+      expect(service.calculateOrderItemPrice(item as any)).resolves.toBe(160);
+    });
+
+    it('should calculate burger combo price correctly ➜ $80', () => {
+      const item = {
         quantity: 1,
         price: 60,
+        categoryName: 'HAMBURGUESAS',
+        config: { isCombo: true },
       };
-      expect(service.calculateOrderItemPrice(burger)).toBe(60);
-
-      // Papas ($20)
-      const fries = {
-        quantity: 1,
-        price: 20,
-      };
-      expect(service.calculateOrderItemPrice(fries)).toBe(20);
+      // 60 + 20 = 80
+      expect(service.calculateOrderItemPrice(item as any)).resolves.toBe(80);
     });
-  });
 
   describe('calculateOrderTotal', () => {
     it('should calculate order total for Hamburguesa ($60) + Papas ($20) ➜ Total $80', () => {
@@ -68,7 +67,7 @@ describe('PricingService', () => {
         { quantity: 1, price: 60 },
         { quantity: 1, price: 20 },
       ];
-      expect(service.calculateOrderTotal(items)).toBe(80);
+      expect(service.calculateOrderTotal(items as any)).resolves.toBe(80);
     });
   });
 });

@@ -5,16 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePOSStore, CartItem } from '../store/usePOSStore';
 
 export const CartView: React.FC = () => {
-  const { cart, removeFromCart, updateQuantity, calculateItemPrice, calculateTotal, clearCart, selectedTable } = usePOSStore();
+  const { cart, removeFromCart, updateQuantity, calculateItemPrice, calculateTotal, clearCart, selectedTable, submitOrder } = usePOSStore();
   
   const handlePrint = () => {
     alert('Imprimiendo pre-cuenta...');
   };
 
-  const handleFinalize = () => {
+  const handleFinalize = async () => {
     if (cart.length === 0) return;
-    alert('Orden enviada a cocina! #' + Math.floor(Math.random() * 1000));
-    clearCart();
+    const success = await submitOrder();
+    if (success) {
+      alert('Orden enviada a cocina!');
+    } else {
+      alert('Error al enviar la orden.');
+    }
   };
 
   return (

@@ -1,248 +1,437 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePOSStore, Product, PizzaConfig } from '../store/usePOSStore';
 import { PizzaBuilder } from './PizzaBuilder';
-import { ProductVariantModal } from './ProductVariantModal';
-import { api } from '../lib/api';
+import { ProductModal } from './ProductModal';
+import { CashClosureModal } from './CashClosureModal';
+
+// Category emoji map for visual flair
+const CAT_ICONS: Record<string, string> = {
+  'PIZZAS': '🍕',
+  'HAMBURGUESAS': '🍔',
+  'HOT DOGS': '🌭',
+  'ALITAS': '🍗',
+  'SNACKS': '🍟',
+  'BEBIDAS': '🥤',
+  'POSTRES': '🍰',
+  'EXTRAS': '➕',
+};
+
+const CATEGORY_ORDER = ['PIZZAS', 'ALITAS', 'HAMBURGUESAS', 'HOT DOGS', 'SNACKS', 'POSTRES', 'BEBIDAS'];
 
 export const MenuView: React.FC = () => {
-  const { products, categories, setCatalog, addToCart, selectedTable, selectTable } = usePOSStore();
+  const { products, categories, addToCart, selectedTable, selectTable, user } = usePOSStore();
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [initialPizza, setInitialPizza] = useState<Product | null>(null);
   const [showPizzaBuilder, setShowPizzaBuilder] = useState(false);
-  const [pizzaSizeForBuilder, setPizzaSizeForBuilder] = useState<'MD' | 'GD' | 'FM'>('GD');
-  const [selectedProductForVariant, setSelectedProductForVariant] = useState<Product | null>(null);
-  const [showSizeSelectorForBuilder, setShowSizeSelectorForBuilder] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isHalfAndHalfMode, setIsHalfAndHalfMode] = useState(false);
+  const [showCashClosure, setShowCashClosure] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  // Sorted categories
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      const indexA = CATEGORY_ORDER.indexOf(a.name.toUpperCase().trim());
+      const indexB = CATEGORY_ORDER.indexOf(b.name.toUpperCase().trim());
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  }, [categories]);
+
+  // Set the first loaded category as the active one
   useEffect(() => {
-    const loadCatalog = async () => {
-      try {
-        setIsLoading(true);
-        const [fetchedCategories, fetchedProducts] = await Promise.all([
-           api.get<any[]>('/categories'),
-           api.get<Product[]>('/products')
-        ]);
-        
-        // Filter out inactive products to ensure fidelity to backend schema
-        const activeProducts = fetchedProducts.filter(p => p.isActive);
-        setCatalog(fetchedCategories, activeProducts);
-        
-        if (fetchedCategories.length > 0) {
-          setActiveCategory(fetchedCategories[0].id);
-        }
-      } catch (err) {
-        console.error('Error fetching catalog:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadCatalog();
-  }, [setCatalog]);
+    if (sortedCategories.length > 0 && !activeCategory) {
+      setActiveCategory(sortedCategories[0].id);
+    }
+  }, [sortedCategories, activeCategory]);
 
-  const filteredProducts = products.filter(p => p.categoryId === activeCategory);
+  const filteredProducts = useMemo(
+    () => products.filter(p => p.categoryId === activeCategory),
+    [products, activeCategory]
+  );
+
+  const activeCategoryName = useMemo(
+    () => categories.find(c => c.id === activeCategory)?.name || '',
+    [categories, activeCategory]
+  );
+
+  const isPizzaCategory = activeCategoryName.toUpperCase().trim() === 'PIZZAS';
 
   const handleProductClick = (product: Product) => {
-    // If it has variants (Size, Wings, Micheladas), open modal
-    // Determine category visually by checking name
-    const categoryName = categories.find(c => c.id === product.categoryId)?.name || '';
+    const catName = categories.find(c => c.id === product.categoryId)?.name || '';
 
-    if (product.requiresSizes && categoryName === 'PIZZAS') {
-       setShowSizeSelectorForBuilder(true);
-       return;
-    }
-
-    if (product.allowMultipleSauces || categoryName === 'BEBIDAS' || categoryName === 'ALITAS') {
-      // Small exception: We want a modal for Drinks if it needs flavor size (e.g., Micheladas)
-      // but strictly speaking, Prisma doesn't have "flavors".
-      // We will open variant modal for anything that requires multiple sauces or is Alitas.
-      // Let's refine:
-      setSelectedProductForVariant(product);
+    // Pizzas → go to builder (Entry A: Solo)
+    if (product.requiresSizes && catName === 'PIZZAS') {
+      setInitialPizza(product);
+      setIsHalfAndHalfMode(false);
+      setShowPizzaBuilder(true);
       return;
     }
 
-    addToCart({
-      productId: product.id,
-      name: product.name,
-      quantity: 1,
-      unitPrice: typeof product.price === 'string' ? parseFloat(product.price) : typeof product.price === 'number' ? product.price : 0,
-    });
+    // Wings, Micheladas → open dedicated modal
+    if (catName === 'ALITAS' || (catName === 'BEBIDAS' && product.name.includes('Michelada'))) {
+      setSelectedProduct(product);
+      return;
+    }
+
+    // Burgers & Hot Dogs → handled by direct buttons
+    if (catName === 'HAMBURGUESAS' || catName === 'HOT DOGS') {
+      return;
+    }
+
+    // Everything else → direct add
+    const basePrice = typeof product.price === 'string' ? parseFloat(product.price) : product.price as number;
+    addToCart({ productId: product.id, name: product.name, quantity: 1, unitPrice: basePrice });
   };
 
-  const handleVariantConfirm = (data: { unitPrice: number; name: string; metadata?: any }) => {
+  const handleModalConfirm = (data: { unitPrice: number; name: string; metadata?: any }) => {
     addToCart({
-      productId: selectedProductForVariant!.id,
+      productId: selectedProduct!.id,
       name: data.name,
       quantity: 1,
       unitPrice: data.unitPrice,
       metadata: data.metadata,
     });
-    setSelectedProductForVariant(null);
+    setSelectedProduct(null);
   };
 
-  const handleHalfAndHalfConfirm = (config: PizzaConfig) => {
-    // Correct momentary preview price calculation: max(A,B) + $15.00
-    // Backend will overwrite this.
-    const getSizedPrice = (pizzaPrice: string | number, size: 'MD' | 'GD' | 'FM') => {
-      const basePrice = typeof pizzaPrice === 'string' ? parseFloat(pizzaPrice) : pizzaPrice;
-      if (size === 'FM') return basePrice + 70;
-      if (size === 'GD') return basePrice + 20;
-      return basePrice;
-    };
-
-    // Calculate preview price using the payload structure
-    const priceA = config.halfA ? getSizedPrice(config.halfA.prices.MD, config.size) : 0;
-    const priceB = config.halfB ? getSizedPrice(config.halfB.prices.MD, config.size) : 0;
-    const finalPrice = Math.max(priceA, priceB) + 15;
+  const handleHalfAndHalfConfirm = (data: { size: string; halfAId: string; halfBId: string; price: number; isHalfAndHalf: boolean }) => {
+    const productA = products.find(p => p.id === data.halfAId);
+    const productB = products.find(p => p.id === data.halfBId);
 
     addToCart({
-      productId: 'p-custom-half', // Backend will intercept this custom ID
-      name: `Mitad y Mitad (${config.size})`,
+      productId: data.halfAId,
+      name: data.isHalfAndHalf 
+        ? `Mitad y Mitad (${data.size})` 
+        : `${productA?.name || 'Pizza'} (${data.size})`,
       quantity: 1,
-      unitPrice: finalPrice,
-      metadata: { pizzaConfig: config }, // We send the full config with IDs
+      unitPrice: data.price,
+      metadata: { 
+        isHalfAndHalf: data.isHalfAndHalf, 
+        size: data.size, 
+        halfAId: data.halfAId, 
+        halfBId: data.halfBId,
+        halfA: productA,
+        halfB: productB
+      },
     });
     setShowPizzaBuilder(false);
+    setInitialPizza(null);
+    setIsHalfAndHalfMode(false);
   };
 
+  const getCatIcon = (name: string) => {
+    return CAT_ICONS[name.toUpperCase().trim()] || '📋';
+  };
+
+  const getPizzaPrice = (basePrice: number, size: 'MD' | 'GD' | 'FM') => {
+    if (size === 'GD') return basePrice + 20;
+    if (size === 'FM') return basePrice + 70;
+    return basePrice;
+  };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
-      <header className="p-8 pb-4 flex justify-between items-center bg-black/20">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => selectTable(null)}
-            className="p-3 rounded-xl bg-white/5 hover:bg-white/10 transition"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <div>
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter">Menú</h2>
-            <p className="text-zinc-500 font-medium">Mesa #{selectedTable?.number}</p>
-          </div>
-        </div>
+    <div className="flex-1 flex h-full overflow-hidden bg-[#0a0a0a] relative">
+      
+      {/* ── FLOATING TOGGLE ── */}
+      {!isSidebarOpen && (
+        <motion.button
+          initial={{ x: -20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          onClick={() => setIsSidebarOpen(true)}
+          className="absolute left-4 top-1/2 -translate-y-1/2 z-40 w-12 h-12 bg-amber-500 text-black rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+        </motion.button>
+      )}
 
-        {activeCategory === 'cat-pizzas' && (
-          <button 
-            onClick={() => setShowSizeSelectorForBuilder(true)}
-            className="bg-accent-orange px-6 py-4 rounded-2xl text-black font-black uppercase tracking-tighter italic flex items-center gap-3 hover:scale-105 transition shadow-lg shadow-accent-orange/20"
-          >
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z" /></svg>
-            Nueva Mitad y Mitad
-          </button>
-        )}
-      </header>
-
-      {/* Categories Tabs */}
-      <div className="flex p-8 pt-4 gap-3 overflow-x-auto no-scrollbar">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveCategory(cat.id)}
-            className={`
-              px-8 py-5 rounded-3xl font-bold text-lg whitespace-nowrap transition-all border-2
-              ${activeCategory === cat.id ? 'bg-accent text-black border-accent' : 'bg-surface-alt border-white/5 text-zinc-400 hover:border-white/10'}
-            `}
-          >
-            {cat.name}
-          </button>
-        ))}
-      </div>
-
-      {/* Products Grid */}
-      <div className="flex-1 overflow-y-auto p-8 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-24 custom-scrollbar">
-        {filteredProducts.map((product) => (
-          <motion.button
-            key={product.id}
-            whileHover={{ y: -5 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => handleProductClick(product)}
-            className="flex flex-col bg-surface-alt border border-white/5 rounded-[2rem] overflow-hidden group hover:border-accent/40 transition-all text-left h-fit"
-          >
-            <div className="aspect-square bg-gradient-to-br from-zinc-800 to-zinc-900 relative p-8">
-              <div className="absolute inset-0 flex items-center justify-center opacity-10 group-hover:opacity-20 transition-opacity">
-                <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M11 9H9V2H7V9H5V2H3V9C3 11.12 4.66 12.84 6.75 12.97V22H9.25V12.97C11.34 12.84 13 11.12 13 9V2H11V9ZM16 6V14H18.5V22H21V2H16V6Z" /></svg>
-              </div>
-              <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
-                <span className="font-black text-accent text-xl italic italic leading-none">
-                  ${typeof product.price === 'string' ? parseFloat(product.price).toFixed(0) : product.price}
-                  {product.requiresSizes && '+'}
-                </span>
-              </div>
-            </div>
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-white leading-tight italic">{product.name}</h3>
-              <p className="text-zinc-500 text-sm mt-2 line-clamp-2 leading-relaxed">{product.description || 'Fiel al menú oficial.'}</p>
-            </div>
-            {(categories.find(c => c.id === product.categoryId)?.name === 'HAMBURGUESAS' || categories.find(c => c.id === product.categoryId)?.name === 'HOT DOGS') && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const comboExtra = categories.find(c => c.id === product.categoryId)?.name === 'HAMBURGUESAS' ? 20 : 15;
-                  const base = typeof product.price === 'string' ? parseFloat(product.price) : product.price;
-                  addToCart({
-                    productId: product.id,
-                    name: `${product.name} + Papas`,
-                    quantity: 1,
-                    unitPrice: (base as number) + comboExtra,
-                    metadata: { isCombo: true },
-                  });
-                }}
-                className="mx-6 mb-6 mt-2 bg-white/5 hover:bg-accent hover:text-black border border-white/10 text-white font-bold py-3 rounded-xl transition-colors text-sm uppercase tracking-widest"
-              >
-                + Con Papas
-              </button>
-            )}
-          </motion.button>
-        ))}
-      </div>
-
+      {/* ── LEFT SIDEBAR: Category Navigation ── */}
       <AnimatePresence>
-        {selectedProductForVariant && (
-          <ProductVariantModal
-            product={selectedProductForVariant}
-            onConfirm={handleVariantConfirm}
-            onCancel={() => setSelectedProductForVariant(null)}
+        {isSidebarOpen && (
+          <motion.aside 
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 112, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            className="w-28 flex-none flex flex-col items-center py-6 gap-2 bg-black/40 border-r border-white/5 overflow-y-auto custom-scrollbar z-30"
+          >
+            {/* Collapse button */}
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="mb-2 w-12 h-12 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 transition text-zinc-500"
+              title="Colapsar"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 19l-7-7 7-7" /></svg>
+            </button>
+
+            {/* Back button */}
+            <button
+              onClick={() => selectTable(null)}
+              className="mb-4 w-16 h-16 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 transition text-zinc-400 border border-white/5"
+              title="Mesas"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+            </button>
+
+            {sortedCategories.map(cat => {
+              const isActive = activeCategory === cat.id;
+              const icon = getCatIcon(cat.name);
+              return (
+                <motion.button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  whileTap={{ scale: 0.93 }}
+                  className={`
+                    relative w-20 flex flex-col items-center gap-1 py-3 px-1 rounded-2xl transition-all text-center
+                    ${isActive
+                      ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30'
+                      : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'}
+                  `}
+                >
+                  <span className="text-2xl leading-none">{icon}</span>
+                  <span className={`text-[10px] font-black uppercase leading-tight tracking-tight ${isActive ? 'text-black' : ''}`}>
+                    {cat.name}
+                  </span>
+                  {isActive && (
+                    <motion.div
+                      layoutId="cat-indicator"
+                      className="absolute -right-0.5 top-1/2 -translate-y-1/2 w-1 h-8 bg-amber-400 rounded-full"
+                    />
+                  )}
+                </motion.button>
+              );
+            })}
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* ── MAIN AREA ── */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        
+        {/* Header */}
+        <header className="flex-none px-8 py-5 flex items-center justify-between border-b border-white/5 bg-black/20">
+          <div>
+            <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">
+              {getCatIcon(activeCategoryName)} {activeCategoryName || 'Menú'}
+            </h2>
+            <p className="text-zinc-500 text-sm font-medium">Mesa #{selectedTable?.number}</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {user?.role === 'ADMIN' && (
+              <motion.button
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => setShowCashClosure(true)}
+                className="flex items-center gap-2 px-5 py-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-600/20 rounded-2xl font-black uppercase tracking-tighter text-xs transition-all shadow-lg"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                Corte
+              </motion.button>
+            )}
+          </div>
+        </header>
+
+        {/* Product Grid */}
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+          {filteredProducts.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-zinc-600 font-bold text-lg italic uppercase tracking-widest">Sin productos</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
+              
+              {/* ── PIZZA MITAD Y MITAD BUTTON ── */}
+              {isPizzaCategory && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setInitialPizza(null);
+                    setIsHalfAndHalfMode(true);
+                    setShowPizzaBuilder(true);
+                  }}
+                  className="relative group overflow-hidden rounded-[2.5rem] border-4 border-dashed border-amber-500/30 hover:border-amber-500 bg-amber-500/5 hover:bg-amber-500/10 transition-all flex flex-col items-center justify-center p-8 text-center min-h-[260px]"
+                >
+                  <div className="w-20 h-20 rounded-full bg-amber-500 text-black flex items-center justify-center mb-4 shadow-xl shadow-amber-500/20 group-hover:rotate-12 transition-transform">
+                    <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 2a10 10 0 0 1 0 20M12 12l8.5 5M12 12l8.5-5"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white group-hover:text-amber-400 transition-colors">
+                    MITAD Y MITAD
+                  </h3>
+                  <p className="text-amber-500/60 font-bold text-[10px] mt-2 uppercase tracking-[0.2em]">
+                    Personalizar sabores
+                  </p>
+                  
+                  {/* Decorative glow */}
+                  <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-amber-500/10 blur-[60px] group-hover:bg-amber-500/20 transition-all" />
+                </motion.button>
+              )}
+
+              {filteredProducts.map((product, i) => {
+                const basePrice = typeof product.price === 'string' ? parseFloat(product.price) : product.price as number;
+                const catName = categories.find(c => c.id === product.categoryId)?.name || '';
+                const isComboCategory = catName === 'HAMBURGUESAS' || catName === 'HOT DOGS';
+                const comboExtra = catName === 'HAMBURGUESAS' ? 20 : 15;
+
+                return (
+                  <motion.div
+                    key={product.id}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    className={`
+                      flex flex-col rounded-[2.2rem] overflow-hidden border border-white/5 bg-zinc-900/80 backdrop-blur-sm hover:border-amber-500/40 transition-all group
+                      ${isPizzaCategory ? 'min-h-[260px]' : ''}
+                    `}
+                  >
+                    {/* Main product area (clicking description opens builder for those who want to see it) */}
+                    <div className="flex-1 p-6 text-left flex flex-col gap-3">
+                      {/* Name & Icon/Badge */}
+                      <div className="flex items-start justify-between gap-4">
+                        <h3 className="text-xl font-black text-white italic uppercase tracking-tighter leading-tight group-hover:text-amber-400 transition-colors">
+                          {product.name}
+                        </h3>
+                        {!isPizzaCategory && (
+                          <span className="text-2xl font-black text-amber-500 italic leading-none">
+                            ${basePrice.toFixed(0)}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Description */}
+                      {product.description && (
+                        <p className="text-zinc-500 text-[11px] font-medium leading-relaxed line-clamp-2 italic">
+                          {product.description}
+                        </p>
+                      )}
+
+                      {/* PIZZA PRICE BUTTONS */}
+                      {isPizzaCategory && (
+                        <div className="mt-auto pt-4 border-t border-white/5 grid grid-cols-3 gap-2">
+                          {[
+                            { label: 'MD', size: 'MD' as const },
+                            { label: 'GD', size: 'GD' as const },
+                            { label: 'FM', size: 'FM' as const }
+                          ].map(sz => (
+                            <motion.button
+                              key={sz.label}
+                              whileHover={{ scale: 1.05, backgroundColor: 'rgba(245, 158, 11, 0.1)' }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleHalfAndHalfConfirm({
+                                size: sz.size,
+                                halfAId: product.id,
+                                halfBId: product.id,
+                                price: getPizzaPrice(basePrice, sz.size),
+                                isHalfAndHalf: false
+                              })}
+                              className="text-center bg-black/40 py-2.5 rounded-xl border border-white/5 hover:border-amber-500/50 transition-all flex flex-col items-center justify-center"
+                            >
+                              <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1.5">{sz.label}</p>
+                              <p className="text-xs font-black text-white italic leading-none">${getPizzaPrice(basePrice, sz.size)}</p>
+                            </motion.button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Tap hint for special products */}
+                      {(catName === 'ALITAS' || (catName === 'BEBIDAS' && product.name.includes('Michelada'))) && (
+                        <button
+                          onClick={() => handleProductClick(product)}
+                          className="mt-auto pt-2 flex items-center gap-2 text-amber-500 hover:text-amber-400 text-[10px] font-black uppercase tracking-widest transition-colors"
+                        >
+                          <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                          Toca para elegir sabor
+                        </button>
+                      )}
+
+                      {/* Normal products (Drinks/Snacks/Desserts) click area */}
+                      {!isPizzaCategory && !isComboCategory && catName !== 'ALITAS' && !(catName === 'BEBIDAS' && product.name.includes('Michelada')) && (
+                        <button
+                          onClick={() => handleProductClick(product)}
+                          className="absolute inset-0 z-0"
+                        />
+                      )}
+                    </div>
+
+                    {/* ── CON PAPAS TOGGLE for Burgers/Hot Dogs ── */}
+                    {isComboCategory && (
+                      <div className="p-4 pt-0 flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToCart({
+                              productId: product.id,
+                              name: product.name,
+                              quantity: 1,
+                              unitPrice: basePrice,
+                            });
+                          }}
+                          className="flex-1 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-[10px] uppercase tracking-widest transition-all border border-white/5 active:scale-95"
+                        >
+                          Sencilla
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToCart({
+                              productId: product.id,
+                              name: `${product.name} + Papas`,
+                              quantity: 1,
+                              unitPrice: basePrice + comboExtra,
+                              metadata: { isCombo: true },
+                            });
+                          }}
+                          className="flex-1 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500 border-2 border-amber-500/40 hover:border-amber-500 text-amber-400 hover:text-black font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
+                        >
+                          + Papas
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── MODALS ── */}
+      <AnimatePresence>
+        {/* Product Modal (Wings, Micheladas) */}
+        {selectedProduct && (
+          <ProductModal
+            product={selectedProduct}
+            onConfirm={handleModalConfirm}
+            onCancel={() => setSelectedProduct(null)}
           />
         )}
-        
-        {showSizeSelectorForBuilder && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-surface p-8 rounded-[2rem] border border-white/10 w-full max-w-sm">
-              <h2 className="text-2xl font-black italic uppercase mb-6">Elige el Tamaño</h2>
-              <div className="space-y-3">
-                {['MD', 'GD', 'FM'].map((sz) => (
-                  <button
-                    key={sz}
-                    onClick={() => {
-                      setPizzaSizeForBuilder(sz as any);
-                      setShowSizeSelectorForBuilder(false);
-                      setShowPizzaBuilder(true);
-                    }}
-                    className="w-full p-6 text-xl font-bold rounded-2xl bg-white/5 border-2 border-white/5 hover:border-accent hover:bg-accent/10 transition-all text-left flex justify-between items-center"
-                  >
-                    {sz === 'MD' ? 'Mediana' : sz === 'GD' ? 'Grande' : 'Familiar'}
-                    <span className="text-accent">{sz}</span>
-                  </button>
-                ))}
-              </div>
-              <button 
-                onClick={() => setShowSizeSelectorForBuilder(false)}
-                className="w-full mt-6 py-4 font-bold text-zinc-500 underline"
-              >
-                Volver
-              </button>
-            </motion.div>
-          </div>
+
+        {/* Cash Closure Modal */}
+        {showCashClosure && (
+          <CashClosureModal onClose={() => setShowCashClosure(false)} />
         )}
 
+        {/* Pizza Half-And-Half Builder */}
         {showPizzaBuilder && (
-          <PizzaBuilder 
-            size={pizzaSizeForBuilder}
-            onConfirm={handleHalfAndHalfConfirm} 
-            onCancel={() => setShowPizzaBuilder(false)} 
+          <PizzaBuilder
+            initialProduct={initialPizza}
+            isHalfAndHalfOnly={isHalfAndHalfMode}
+            onConfirm={handleHalfAndHalfConfirm}
+            onCancel={() => {
+              setShowPizzaBuilder(false);
+              setInitialPizza(null);
+              setIsHalfAndHalfMode(false);
+            }}
           />
         )}
       </AnimatePresence>

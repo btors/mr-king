@@ -28,4 +28,10 @@ export class UsersService {
       where: { id },
     });
   }
+
+  async findOneByRole(role: Role) {
+    return this.prisma.user.findFirst({
+      where: { role },
+    });
+  }
 }

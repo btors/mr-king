@@ -9,22 +9,22 @@ test.describe('E2E Admin Products Usability & Stress', () => {
 
   test('Acceso: Debe rechazar PIN incorrecto y aceptar 9999', async ({ page }) => {
     // Ingresar PIN incorrecto: 1234
-    await page.getByRole('button', { name: '1' }).click();
-    await page.getByRole('button', { name: '2' }).click();
-    await page.getByRole('button', { name: '3' }).click();
-    await page.getByRole('button', { name: '4' }).click();
-
+    await page.getByRole('button', { name: '1' }).click({ delay: 50, force: true });
+    await page.getByRole('button', { name: '2' }).click({ delay: 50, force: true });
+    await page.getByRole('button', { name: '3' }).click({ delay: 50, force: true });
+    await page.getByRole('button', { name: '4' }).click({ delay: 50, force: true });
+ 
     // Debe mostrar error
     await expect(page.getByText('Acceso Denegado')).toBeVisible();
-
+ 
     // Esperar a que se limpie (1 segundo)
     await page.waitForTimeout(1100);
-
+ 
     // Ingresar PIN correcto: 9999
     for (let i = 0; i < 4; i++) {
-      await page.getByRole('button', { name: '9' }).click();
+      await page.getByRole('button', { name: '9' }).click({ delay: 50, force: true });
     }
-
+ 
     // Debe acceder al panel
     await expect(page.getByRole('heading', { name: 'Gestión de Productos' })).toBeVisible();
   });
@@ -67,7 +67,7 @@ test.describe('E2E Admin Products Usability & Stress', () => {
 
     // 1. Acceder con PIN
     for (let i = 0; i < 4; i++) {
-        await page.getByRole('button', { name: '9' }).click();
+        await page.getByRole('button', { name: '9' }).click({ delay: 50, force: true });
     }
     await expect(page.getByRole('heading', { name: 'Gestión de Productos' })).toBeVisible();
 

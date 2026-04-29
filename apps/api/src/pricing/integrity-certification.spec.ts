@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PricingService } from './pricing.service';
 import { OrdersGateway } from '../events/orders.gateway';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('Integrity Certification - Post-Refactor', () => {
   let service: PricingService;
@@ -10,6 +11,14 @@ describe('Integrity Certification - Post-Refactor', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PricingService,
+        {
+          provide: PrismaService,
+          useValue: {
+            product: {
+              findUnique: jest.fn(),
+            },
+          },
+        },
         {
           provide: OrdersGateway,
           useValue: {
@@ -28,7 +37,7 @@ describe('Integrity Certification - Post-Refactor', () => {
     gateway = module.get<OrdersGateway>(OrdersGateway);
   });
 
-  it('🔹 Caso de Prueba 1: Lógica de Pizza de Alta Gama (Familiar + Mitad) ➜ $275.00', () => {
+  it('🔹 Caso de Prueba 1: Lógica de Pizza de Alta Gama (Familiar + Mitad) ➜ $275.00', async () => {
     const pizzaItem = {
       quantity: 1,
       price: 0,
@@ -40,11 +49,11 @@ describe('Integrity Certification - Post-Refactor', () => {
       },
     };
     
-    const result = service.calculateOrderItemPrice(pizzaItem);
+    const result = await service.calculateOrderItemPrice(pizzaItem);
     expect(result).toBe(275.00);
   });
 
-  it('🔹 Caso de Prueba 2: Combo de Hamburguesa Sirloin ➜ $140.00', () => {
+  it('🔹 Caso de Prueba 2: Combo de Hamburguesa Sirloin ➜ $140.00', async () => {
     const burgerItem = {
       quantity: 1,
       price: 120, // Sirloin Base Price
@@ -55,11 +64,11 @@ describe('Integrity Certification - Post-Refactor', () => {
       },
     };
 
-    const result = service.calculateOrderItemPrice(burgerItem);
+    const result = await service.calculateOrderItemPrice(burgerItem);
     expect(result).toBe(140.00);
   });
 
-  it('🔹 Caso de Prueba 3: Hot Dog Hawaiano en Combo ➜ $60.00', () => {
+  it('🔹 Caso de Prueba 3: Hot Dog Hawaiano en Combo ➜ $60.00', async () => {
     const hotDogItem = {
       quantity: 1,
       price: 45, // HD Hawaiano Base Price
@@ -70,11 +79,11 @@ describe('Integrity Certification - Post-Refactor', () => {
       },
     };
 
-    const result = service.calculateOrderItemPrice(hotDogItem);
+    const result = await service.calculateOrderItemPrice(hotDogItem);
     expect(result).toBe(60.00);
   });
 
-  it('🔹 Caso de Prueba 4: Escalamiento de Alitas (24 piezas) ➜ $290.00', () => {
+  it('🔹 Caso de Prueba 4: Escalamiento de Alitas (24 piezas) ➜ $290.00', async () => {
     const wingsItem = {
       quantity: 24, // Pieces
       price: 15, // Dummy unit price, should be ignored
@@ -82,7 +91,7 @@ describe('Integrity Certification - Post-Refactor', () => {
       productName: 'Alitas',
     };
 
-    const result = service.calculateOrderItemPrice(wingsItem);
+    const result = await service.calculateOrderItemPrice(wingsItem);
     expect(result).toBe(290.00);
   });
 

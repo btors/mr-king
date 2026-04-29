@@ -25,13 +25,15 @@ export class PricingService {
       isCombo?: boolean;
     }
   }): Promise<number> {
-    let unitPrice = Number(item.price);
+    console.log('Procesando Item:', JSON.stringify(item, null, 2));
+    let unitPrice = Number(item.price || 0);
     
-    // Fetch product to retrieve operational flags
-    let productDetails = null;
+    // Fetch product to retrieve operational flags and category fallback
+    let productDetails: any = null;
     if (item.productId) {
       productDetails = await this.prisma.product.findUnique({
-        where: { id: item.productId }
+        where: { id: item.productId },
+        include: { category: true }
       });
 
       if (productDetails && item.config?.variants) {
@@ -41,8 +43,11 @@ export class PricingService {
       }
     }
 
+    // Determine the category name from input or database
+    const finalCategoryName = item.categoryName || productDetails?.category?.name || '';
+
     // 1. Handle Wings Scaling (Alitas)
-    if (item.categoryName === 'ALITAS' || item.productName === 'Alitas' || productDetails?.categoryId === 'ALITAS') {
+    if (finalCategoryName === 'ALITAS' || item.productName === 'Alitas') {
       const wingsTiers: Record<number, number> = {
         6: 85,
         12: 160,
@@ -58,16 +63,16 @@ export class PricingService {
 
     // 2. Handle Half-and-Half Pizza Rule with Database strictness
     if (item.config?.isHalfAndHalf) {
-      let priceA = Number(item.config.halfA?.price || 0);
-      let priceB = Number(item.config.halfB?.price || 0);
+      let priceA = Number(item.config?.halfA?.price || 0);
+      let priceB = Number(item.config?.halfB?.price || 0);
 
       // Trust Database over Frontend if IDs are provided
-      if (item.config.halfA?.productId) {
+      if (item.config?.halfA?.productId) {
         const prodA = await this.prisma.product.findUnique({ where: { id: item.config.halfA.productId } });
         if (prodA) priceA = Number(prodA.price);
       }
 
-      if (item.config.halfB?.productId) {
+      if (item.config?.halfB?.productId) {
         const prodB = await this.prisma.product.findUnique({ where: { id: item.config.halfB.productId } });
         if (prodB) priceB = Number(prodB.price);
       }
@@ -77,9 +82,9 @@ export class PricingService {
 
     // 3. Handle Combo Logic for Burgers and Hot Dogs
     if (item.config?.isCombo) {
-      if (item.categoryName === 'HAMBURGUESAS') {
+      if (finalCategoryName === 'HAMBURGUESAS') {
         unitPrice += 20; // Surcharge for Burger combo
-      } else if (item.categoryName === 'HOT DOGS') {
+      } else if (finalCategoryName === 'HOT DOGS') {
         unitPrice += 15; // Surcharge for Hot Dog combo
       }
     }

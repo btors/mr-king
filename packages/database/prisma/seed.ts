@@ -1,6 +1,11 @@
+import "dotenv/config";
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('Starting seed...');
@@ -11,6 +16,30 @@ async function main() {
   await prisma.order.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
+  await prisma.user.deleteMany();
+
+  // 1.5 USERS
+  const bcrypt = require('bcryptjs');
+  const hashedPassword = bcrypt.hashSync('admin123', 10);
+  const admin = await prisma.user.create({
+    data: {
+      username: 'admin',
+      password: hashedPassword,
+      name: 'Admin User',
+      role: 'ADMIN',
+    },
+  });
+  console.log('Admin user created:', admin.username);
+
+  const waiter = await prisma.user.create({
+    data: {
+      username: 'waiter',
+      password: hashedPassword,
+      name: 'Waiter User',
+      role: 'WAITER',
+    },
+  });
+  console.log('Waiter user created:', waiter.username);
 
   // 2. CATEGORIES
   const categoriesData = ['PIZZAS', 'HAMBURGUESAS', 'HOT DOGS', 'ALITAS', 'SNACKS', 'BEBIDAS', 'POSTRES', 'EXTRAS'];
@@ -131,8 +160,20 @@ async function main() {
       { name: 'Cheesecake de Frambuesa', price: 35, categoryId: catMap['POSTRES'] },
       { name: 'Chocoflan', price: 35, categoryId: catMap['POSTRES'] },
       { name: 'Aderezo', price: 10, categoryId: catMap['EXTRAS'] },
-      { name: 'Zanahoria', price: 10, categoryId: catMap['EXTRAS'] },
       { name: 'Salsa', price: 10, categoryId: catMap['EXTRAS'] },
+    ],
+  });
+
+  // 10. TABLES
+  await prisma.table.deleteMany();
+  await prisma.table.createMany({
+    data: [
+      { number: 1, status: 'AVAILABLE' },
+      { number: 2, status: 'AVAILABLE' },
+      { number: 3, status: 'AVAILABLE' },
+      { number: 4, status: 'AVAILABLE' },
+      { number: 5, status: 'AVAILABLE' },
+      { number: 6, status: 'AVAILABLE' },
     ],
   });
 

@@ -9,6 +9,10 @@ import { PricingModule } from './pricing/pricing.module';
 import { EventsModule } from './events/events.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
+import { OrdersModule } from './orders/orders.module';
+import { PizzasModule } from './pizzas/pizzas.module';
+import { CashModule } from './cash/cash.module';
+import { TablesModule } from './tables/tables.module';
 
 @Module({
   imports: [
@@ -22,6 +26,10 @@ import { ProductsModule } from './products/products.module';
     EventsModule,
     CategoriesModule,
     ProductsModule,
+    OrdersModule,
+    PizzasModule,
+    CashModule,
+    TablesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

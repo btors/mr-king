@@ -32,4 +32,9 @@ export class AuthController {
   getProfile(@Request() req: any) {
     return req.user;
   }
+
+  @Get('pin')
+  async getPins() {
+    return this.authService.getPins();
+  }
 }

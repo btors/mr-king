@@ -3,6 +3,7 @@ import { ProductsService } from './products.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { Role } from '@prisma/client';
 
 @Controller('products')
@@ -11,13 +12,13 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
-  @Roles(Role.WAITER, Role.KITCHEN, Role.ADMIN)
+  @Public()
   async findAll() {
     return this.productsService.findAll();
   }
 
   @Get(':id')
-  @Roles(Role.WAITER, Role.KITCHEN, Role.ADMIN)
+  @Public()
   async findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
   }
