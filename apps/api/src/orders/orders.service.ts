@@ -17,28 +17,39 @@ export class OrdersService {
     // 1. Calculate total using PricingService
     const total = await this.pricingService.calculateOrderTotal(items);
 
-    // 2. Create order in transaction
-    const order = await this.prisma.order.create({
-      data: {
-        total,
-        waiterId,
-        tableId,
-        orderType,
-        clientName,
-        clientType,
-        items: {
-          create: items.map((item: any) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price, // Store the unit price at time of sale
-            notes: item.notes,
-            pizzaConfig: item.config || {},
-          })),
+    // 2. Create order and update table status in transaction
+    const order = await this.prisma.$transaction(async (tx) => {
+      const newOrder = await tx.order.create({
+        data: {
+          total,
+          waiterId,
+          tableId,
+          orderType,
+          clientName,
+          clientType,
+          items: {
+            create: items.map((item: any) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              notes: item.notes,
+              pizzaConfig: item.config || {},
+            })),
+          },
         },
-      },
-      include: {
-        items: true,
-      },
+        include: {
+          items: true,
+        },
+      });
+
+      if (tableId) {
+        await tx.table.update({
+          where: { id: tableId },
+          data: { status: 'OCCUPIED' },
+        });
+      }
+
+      return newOrder;
     });
 
     // 3. Emit real-time event

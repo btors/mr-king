@@ -42,12 +42,16 @@ export interface CartItem {
   name: string;
   quantity: number;
   unitPrice: number; // Final calculated unit price
+  status: 'DRAFT' | 'SENT';
   metadata?: {
     size?: string;
     isCombo?: boolean;
     flavor?: string;
     wingCount?: number;
     pizzaConfig?: PizzaConfig;
+    isHalfAndHalf?: boolean;
+    halfAId?: string;
+    halfBId?: string;
   };
   notes?: string;
 }
@@ -65,7 +69,7 @@ interface POSState {
   logout: () => void;
   setCatalog: (categories: any[], products: any[]) => void;
   selectTable: (table: Table | null) => void;
-  addToCart: (item: Omit<CartItem, 'tempId'>) => void;
+  addToCart: (item: Omit<CartItem, 'tempId' | 'status'>) => void;
   removeFromCart: (tempId: string) => void;
   updateQuantity: (tempId: string, quantity: number) => void;
   clearCart: () => void;
@@ -76,6 +80,9 @@ interface POSState {
   calculateTotal: () => number;
   submitOrder: () => Promise<boolean>;
   clearEverything: () => void;
+  loadTableBill: (tableId: string) => Promise<void>;
+  payTable: (tableId: string) => Promise<boolean>;
+  clearDrafts: () => void;
 }
 
 export const usePOSStore = create<POSState>()(
@@ -113,23 +120,36 @@ export const usePOSStore = create<POSState>()(
         }
       },
 
-      logout: () => set({ user: null, selectedTable: null, cart: [] }),
+      logout: () => {
+        set({ user: null, selectedTable: null, cart: [] });
+        if (typeof window !== 'undefined') {
+          window.location.href = '/'; // Go to PIN screen
+        }
+      },
 
       setCatalog: (categories, products) => set({ categories, products }),
 
-      selectTable: (table) => set({ selectedTable: table }),
+      selectTable: (table) => {
+        // ALWAYS clear the cart first to avoid leakage between tables
+        set({ cart: [], selectedTable: table });
+        
+        // If the table is occupied, load its current bill
+        if (table?.status === 'OCCUPIED') {
+          get().loadTableBill(table.id);
+        }
+      },
 
       addToCart: (item) => set((state) => ({
-        cart: [...state.cart, { ...item, tempId: Math.random().toString(36).substring(7) }]
+        cart: [...state.cart, { ...item, tempId: Math.random().toString(36).substring(7), status: 'DRAFT' }]
       })),
 
       removeFromCart: (tempId) => set((state) => ({
-        cart: state.cart.filter((i) => i.tempId !== tempId)
+        cart: state.cart.filter((i) => i.tempId !== tempId || i.status === 'SENT')
       })),
 
       updateQuantity: (tempId, quantity) => set((state) => ({
         cart: state.cart.map((i) => 
-          i.tempId === tempId ? { ...i, quantity: Math.max(1, quantity) } : i
+          (i.tempId === tempId && i.status === 'DRAFT') ? { ...i, quantity: Math.max(1, quantity) } : i
         )
       })),
 
@@ -155,12 +175,14 @@ export const usePOSStore = create<POSState>()(
 
       submitOrder: async () => {
         const { cart, user, selectedTable } = get();
-        if (cart.length === 0 || !user) return false;
+        const draftItems = cart.filter(i => i.status === 'DRAFT');
+        
+        if (draftItems.length === 0 || !user) return false;
 
         const payload = {
           waiterId: user.id,
           tableId: selectedTable?.id,
-          items: cart.map(item => {
+          items: draftItems.map(item => {
             const config: any = {};
             if (item.metadata) {
               config.isHalfAndHalf = !!item.metadata.isHalfAndHalf;
@@ -189,7 +211,16 @@ export const usePOSStore = create<POSState>()(
 
         try {
           await api.post('/orders', payload);
-          set({ cart: [] });
+          
+          // Move DRAFT to SENT instead of clearing
+          set((state) => ({
+            cart: state.cart.map(i => i.status === 'DRAFT' ? { ...i, status: 'SENT' as const } : i)
+          }));
+
+          // Refresh tables to reflect OCCUPIED status
+          const tables = await api.get<Table[]>('/tables');
+          const updatedTable = tables.find(t => t.id === selectedTable?.id);
+          set({ tables, selectedTable: updatedTable || selectedTable });
           return true;
         } catch (err) {
           console.error('Order submission failed. Payload:', payload);
@@ -197,6 +228,50 @@ export const usePOSStore = create<POSState>()(
           return false;
         }
       },
+
+      loadTableBill: async (tableId: string) => {
+        try {
+          const bill = await api.get<{ orders: any[] }>(`/tables/${tableId}/bill`);
+          const allItems = bill.orders.flatMap(order => order.items);
+          
+          const cartItems: CartItem[] = allItems.map(item => ({
+            tempId: Math.random().toString(36).substring(7),
+            productId: item.productId,
+            name: item.product.name,
+            quantity: item.quantity,
+            unitPrice: Number(item.price),
+            status: 'SENT',
+            metadata: {
+              ...item.pizzaConfig,
+              isHalfAndHalf: item.pizzaConfig?.isHalfAndHalf,
+              size: item.pizzaConfig?.size,
+              halfAId: item.pizzaConfig?.halfA?.productId,
+              halfBId: item.pizzaConfig?.halfB?.productId,
+            }
+          }));
+          set({ cart: cartItems });
+        } catch (err) {
+          console.error('Failed to load table bill:', err);
+        }
+      },
+
+      payTable: async (tableId: string) => {
+        try {
+          await api.post(`/tables/${tableId}/pay`, {});
+          set({ cart: [], selectedTable: null });
+          // Refresh tables to see it available
+          const tables = await api.get<Table[]>('/tables');
+          set({ tables });
+          return true;
+        } catch (err) {
+          console.error('Failed to pay table:', err);
+          return false;
+        }
+      },
+
+      clearDrafts: () => set((state) => ({
+        cart: state.cart.filter(i => i.status === 'SENT')
+      })),
 
       clearEverything: () => {
         if (typeof window !== 'undefined') {

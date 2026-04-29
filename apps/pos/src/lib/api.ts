@@ -1,6 +1,6 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'; // Defaulting to 4000 as typical for NestJS when Next is 3000, but using the user provided example structure
 
-const SIMULATED_ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluMSIsInN1YiI6InVzZXItaWQtMSIsInJvbGUiOiJBRE1JTiIsImlhdCI6MTc3NzA1MTM1NywiZXhwIjoxNzc3MDg3MzU3fQ.UcFNvDUReq1f8g9Dn1HzoFsg4cJoPPPx_EkeJOVkUMM";
+const SIMULATED_ADMIN_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIiwic3ViIjoiYWRtaW4taWQiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3Nzc0OTM3NDksImV4cCI6MTgwOTA1MTM0OX0.5f2TO-CWDemRlhih00Z57T_Q35mD95DLcd0ovFHdcQo";
 
 interface FetchOptions extends RequestInit {
   data?: any;
