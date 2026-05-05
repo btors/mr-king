@@ -1,0 +1,33 @@
+FROM node:20-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/kds/package.json ./apps/kds/
+RUN npm install
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Set environment variables for build
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+RUN npm run build --workspace=@mr-king/kds
+
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV production
+COPY --from=builder /app/apps/kds/.next ./.next
+COPY --from=builder /app/apps/kds/public ./public
+COPY --from=builder /app/apps/kds/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
+
+EXPOSE 3001
+CMD ["npm", "run", "start", "--workspace=@mr-king/kds"]
