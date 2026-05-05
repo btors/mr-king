@@ -10,6 +10,18 @@ interface OrderCardProps {
 
 export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const updateOrderStatus = useKdsStore((state) => state.updateOrderStatus);
+  const [isFlashing, setIsFlashing] = React.useState(() => {
+    // Flash if order was created less than 10 seconds ago (to account for network latency)
+    const diff = Date.now() - new Date(order.createdAt).getTime();
+    return diff < 10000; 
+  });
+
+  React.useEffect(() => {
+    if (isFlashing) {
+      const timer = setTimeout(() => setIsFlashing(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isFlashing]);
 
   const renderMetadata = (item: any) => {
     const config = item.pizzaConfig || {};
@@ -77,8 +89,19 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     <motion.div
       layout
       initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="bg-zinc-900 border border-white/10 rounded-[2rem] shadow-2xl flex flex-col gap-0 min-h-[300px] overflow-hidden"
+      animate={{ 
+        opacity: 1, 
+        scale: 1,
+        borderColor: isFlashing ? ['#fbbf24', '#78350f', '#fbbf24'] : 'rgba(255, 255, 255, 0.1)',
+        borderWidth: isFlashing ? 4 : 1,
+        boxShadow: isFlashing ? '0 0 40px rgba(251, 191, 36, 0.3)' : '0 20px 50px rgba(0,0,0,0.5)'
+      }}
+      transition={{
+        borderColor: isFlashing ? { repeat: Infinity, duration: 0.8 } : { duration: 0.3 },
+        opacity: { duration: 0.3 },
+        scale: { duration: 0.3 }
+      }}
+      className="bg-zinc-900 rounded-[2rem] flex flex-col gap-0 min-h-[300px] overflow-hidden transition-colors"
     >
       {/* ── OMNICHANNEL BANNER ── */}
       {order.orderType === 'TAKE_AWAY' && (

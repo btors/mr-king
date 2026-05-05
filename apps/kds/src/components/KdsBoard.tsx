@@ -4,9 +4,10 @@ import React, { useEffect } from 'react';
 import { useKdsStore } from '../store/useKdsStore';
 import { OrderCard } from './OrderCard';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Volume2, VolumeX } from 'lucide-react';
 
 export const KdsBoard: React.FC = () => {
-  const { orders, connect, disconnect, fetchOrders, isLoading, isConnected } = useKdsStore();
+  const { orders, connect, disconnect, fetchOrders, isLoading, isConnected, isAudioEnabled, toggleAudio } = useKdsStore();
 
   useEffect(() => {
     connect();
@@ -52,6 +53,34 @@ export const KdsBoard: React.FC = () => {
         </div>
         
         <div className="flex gap-4">
+          <button
+            onClick={toggleAudio}
+            className={`
+              flex items-center gap-3 px-6 py-4 rounded-[1.5rem] border transition-all duration-300
+              ${isAudioEnabled 
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                : 'bg-red-500/10 border-red-500/20 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.1)]'}
+            `}
+          >
+            {isAudioEnabled ? (
+              <>
+                <Volume2 size={24} className="animate-pulse" />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Alertas</p>
+                  <p className="text-sm font-black italic uppercase tracking-tighter leading-none">Activas</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <VolumeX size={24} />
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Audio</p>
+                  <p className="text-sm font-black italic uppercase tracking-tighter leading-none">Bloqueado</p>
+                </div>
+              </>
+            )}
+          </button>
+
           <div className="bg-zinc-900/50 border border-white/5 rounded-[1.5rem] px-8 py-4 flex flex-col items-center justify-center min-w-[120px]">
             <span className="text-3xl font-black text-white italic">{orders.length}</span>
             <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mt-1">Órdenes</span>

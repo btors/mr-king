@@ -39,6 +39,8 @@ interface KdsState {
   disconnect: () => void;
   fetchOrders: () => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  isAudioEnabled: boolean;
+  toggleAudio: () => void;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -48,6 +50,20 @@ export const useKdsStore = create<KdsState>((set, get) => ({
   socket: null,
   isLoading: false,
   isConnected: false,
+  isAudioEnabled: false,
+  notificationAudio: typeof Audio !== 'undefined' ? new Audio('/sounds/notification.mp3') : null,
+
+  toggleAudio: () => {
+    const { isAudioEnabled, notificationAudio } = get();
+    if (!isAudioEnabled && notificationAudio) {
+      // Play and pause immediately to "unlock" the audio object on interaction
+      notificationAudio.play().then(() => {
+        notificationAudio.pause();
+        notificationAudio.currentTime = 0;
+      }).catch(e => console.log('Audio unlock failed:', e));
+    }
+    set({ isAudioEnabled: !isAudioEnabled });
+  },
 
   connect: () => {
     if (get().socket) return;
@@ -74,8 +90,9 @@ export const useKdsStore = create<KdsState>((set, get) => ({
       console.log('New order received:', newOrder);
       
       // Play notification sound
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audio.play().catch(e => console.log('Audio play blocked until user interaction'));
+      if (get().isAudioEnabled && get().notificationAudio) {
+        get().notificationAudio?.play().catch(e => console.log('Audio play blocked:', e));
+      }
 
       set((state) => ({ orders: [newOrder, ...state.orders] }));
     });
