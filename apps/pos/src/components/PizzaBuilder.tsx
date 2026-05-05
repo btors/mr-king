@@ -18,7 +18,7 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
   onCancel 
 }) => {
   const { products, categories } = usePOSStore();
-  const pizzaCategory = categories.find(c => c.name === 'PIZZAS');
+  const pizzaCategory = categories.find(c => c.name.toUpperCase() === 'PIZZAS');
   const pizzas = products.filter(p => p.categoryId === pizzaCategory?.id && p.isActive);
   
   const [size, setSize] = useState<'MD' | 'GD' | 'FM' | null>(null);
@@ -28,10 +28,8 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
 
   const getPrice = (p: Product | null, currentSize: string | null) => {
     if (!p || !currentSize) return 0;
-    const base = typeof p.price === 'string' ? parseFloat(p.price) : p.price;
-    if (currentSize === 'FM') return (base as number) + 70;
-    if (currentSize === 'GD') return (base as number) + 20;
-    return base as number;
+    const variant = p.variants.find(v => v.name === currentSize);
+    return variant?.price || 0;
   };
 
   const handleConfirm = () => {
@@ -51,9 +49,9 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
 
     if (isHalfAndHalfOnly && halfA && halfB) {
       // Flow B: Half and half
-      const baseA = typeof halfA.price === 'string' ? parseFloat(halfA.price) : halfA.price;
-      const baseB = typeof halfB.price === 'string' ? parseFloat(halfB.price) : halfB.price;
-      const finalPrice = Math.max(Number(baseA), Number(baseB)) + 15;
+      const priceA = getPrice(halfA, size);
+      const priceB = getPrice(halfB, size);
+      const finalPrice = Math.max(priceA, priceB) + 15;
 
       onConfirm({
         size,
@@ -69,9 +67,9 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
     if (!size) return 0;
     if (!isHalfAndHalfOnly && halfA) return getPrice(halfA, size);
     if (isHalfAndHalfOnly && halfA && halfB) {
-      const baseA = typeof halfA.price === 'string' ? parseFloat(halfA.price) : halfA.price;
-      const baseB = typeof halfB.price === 'string' ? parseFloat(halfB.price) : halfB.price;
-      return Math.max(Number(baseA), Number(baseB)) + 15;
+      const priceA = getPrice(halfA, size);
+      const priceB = getPrice(halfB, size);
+      return Math.max(priceA, priceB) + 15;
     }
     return 0;
   };
@@ -158,9 +156,9 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
               <div className="h-full flex flex-col justify-center max-w-md mx-auto space-y-4">
                 <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-4 text-center text-white">Selecciona Tamaño</h3>
                 {[
-                  { key: 'MD', label: 'Mediana', extra: '' },
-                  { key: 'GD', label: 'Grande', extra: '+$20' },
-                  { key: 'FM', label: 'Familiar', extra: '+$70' },
+                  { key: 'MD', label: 'Mediana' },
+                  { key: 'GD', label: 'Grande' },
+                  { key: 'FM', label: 'Familiar' },
                 ].map((sz) => (
                   <button
                     key={sz.key}
@@ -168,8 +166,6 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
                       setSize(sz.key as any);
                       if (isHalfAndHalfOnly) {
                         setStep('A');
-                      } else {
-                        // For solo flow, selecting size is enough to enable confirm
                       }
                     }}
                     className={`w-full p-6 text-xl font-bold rounded-3xl border-2 transition-all text-left flex justify-between items-center group
@@ -179,7 +175,7 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
                     <span>{sz.label}</span>
                     <div className="text-right">
                       <span className="text-amber-500 font-black text-2xl tracking-tighter">{sz.key}</span>
-                      {sz.extra && <p className="text-zinc-500 text-xs font-bold tracking-widest">{sz.extra}</p>}
+                      {halfA && <p className="text-zinc-500 text-xs font-bold tracking-widest">${getPrice(halfA, sz.key)}</p>}
                     </div>
                   </button>
                 ))}

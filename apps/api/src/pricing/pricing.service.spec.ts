@@ -14,6 +14,7 @@ describe('PricingService', () => {
           useValue: {
             product: {
               findUnique: jest.fn(),
+              findFirst: jest.fn().mockResolvedValue(null),
             },
           },
         },
@@ -50,15 +51,27 @@ describe('PricingService', () => {
       expect(service.calculateOrderItemPrice(item as any)).resolves.toBe(160);
     });
 
-    it('should calculate burger combo price correctly ➜ $80', () => {
+    it('should calculate burger combo price correctly from variant', async () => {
       const item = {
         quantity: 1,
-        price: 60,
+        price: 0,
+        productId: 'burger123',
+        variantName: 'Con Papas',
         categoryName: 'HAMBURGUESAS',
         config: { isCombo: true },
       };
-      // 60 + 20 = 80
-      expect(service.calculateOrderItemPrice(item as any)).resolves.toBe(80);
+      
+      // Mock Prisma return for product
+      (service as any).prisma.product.findUnique.mockResolvedValue({
+        id: 'burger123',
+        variants: [
+          { name: 'Sencilla', price: 60 },
+          { name: 'Con Papas', price: 80 }
+        ]
+      });
+
+      // The variant 'Con Papas' is $80
+      await expect(service.calculateOrderItemPrice(item as any)).resolves.toBe(80);
     });
 
   describe('calculateOrderTotal', () => {

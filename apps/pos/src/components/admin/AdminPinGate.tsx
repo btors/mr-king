@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAdminStore } from '../../store/useAdminStore';
 import { Keypad } from '../ui/Keypad'; // Reuse the existing POS Keypad
+import { useRouter } from 'next/navigation';
 
 interface AdminPinGateProps {
   children: React.ReactNode;
@@ -13,6 +14,7 @@ export const AdminPinGate: React.FC<AdminPinGateProps> = ({ children }) => {
   const { isAdminUnlocked, unlockAdmin } = useAdminStore();
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const router = useRouter();
 
   if (isAdminUnlocked) {
     return <>{children}</>;
@@ -89,6 +91,16 @@ export const AdminPinGate: React.FC<AdminPinGateProps> = ({ children }) => {
             </motion.p>
           )}
         </AnimatePresence>
+
+        <div className="pt-4 border-t border-white/10 flex justify-center">
+          <button 
+            onClick={() => router.push('/')}
+            className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-colors rounded-2xl text-sm font-bold uppercase tracking-widest"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            Cancelar
+          </button>
+        </div>
       </motion.div>
     </div>
   );

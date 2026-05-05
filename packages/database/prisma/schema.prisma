@@ -7,32 +7,38 @@ datasource db {
 }
 
 model User {
-  id        String     @id @default(cuid())
-  name      String
-  username  String     @unique
-  password  String
-  role      Role       @default(WAITER)
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  cashFlows CashFlow[]
-  orders    Order[]
+  id           String     @id @default(cuid())
+  name         String
+  username     String     @unique
+  password     String
+  role         Role       @default(WAITER)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  cashFlows    CashFlow[]
+  orders       Order[]
+  shiftsOpened Shift[]    @relation("ShiftOpenedBy")
+  shiftsClosed Shift[]    @relation("ShiftClosedBy")
 }
 
 model Category {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  id               String           @id @default(cuid())
+  name             String           @unique
+  preparationPlace PreparationPlace @default(KITCHEN)
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  products         Product[]
 }
 
 model Product {
   id                  String      @id @default(cuid())
   name                String
   description         String?
-  price               Decimal     @db.Decimal(10, 2)
+  variants            Json        @default("[]")
+  flavors             Json        @default("[]")
+  maxFlavors          Int         @default(0)
+  canBeHalfAndHalf    Boolean     @default(false)
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -48,6 +54,7 @@ model Table {
   id        String      @id @default(cuid())
   number    Int         @unique
   capacity  Int         @default(4)
+  type      TableType   @default(TABLE)
   status    TableStatus @default(AVAILABLE)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
@@ -95,8 +102,10 @@ model CashFlow {
   createdAt     DateTime      @default(now())
   userId        String
   orderId       String?
+  shiftId       String?
   order         Order?        @relation(fields: [orderId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
+  shift         Shift?        @relation(fields: [shiftId], references: [id])
 }
 
 enum Role {
@@ -143,4 +152,35 @@ enum OrderType {
   EAT_IN
   TAKE_AWAY
   DELIVERY
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum TableType {
+  TABLE
+  STOOL
+}
+
+enum PreparationPlace {
+  KITCHEN
+  WAITER_BAR
+}
+
+model Shift {
+  id              String      @id @default(cuid())
+  status          ShiftStatus @default(OPEN)
+  openingBalance  Decimal     @db.Decimal(10, 2)
+  expectedBalance Decimal?    @db.Decimal(10, 2)
+  actualBalance   Decimal?    @db.Decimal(10, 2)
+  openedAt        DateTime    @default(now())
+  closedAt        DateTime?
+  openedById      String
+  closedById      String?
+
+  openedBy        User        @relation("ShiftOpenedBy", fields: [openedById], references: [id])
+  closedBy        User?       @relation("ShiftClosedBy", fields: [closedById], references: [id])
+  cashFlows       CashFlow[]
 }

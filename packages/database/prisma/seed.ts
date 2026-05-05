@@ -1,190 +1,329 @@
-import "dotenv/config";
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
+import 'dotenv/config';
+import { PrismaClient, PreparationPlace, TableType } from '@prisma/client';
 import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import * as bcrypt from 'bcrypt';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const connectionString = process.env.DATABASE_URL || "postgresql://mrking_user:mrking_password@localhost:5432/mrking_db?schema=public";
+const pool = new Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('Starting seed...');
+  console.log('Initiating database cleanup...');
+  // Cascaded Delete
+  await prisma.cashFlow.deleteMany({});
+  await prisma.orderItem.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.shift.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.product.deleteMany({});
+  await prisma.category.deleteMany({});
+  await prisma.table.deleteMany({});
+  console.log('Database cleanup completed.');
 
-  // 1. CLEANUP
-  await prisma.orderItem.deleteMany();
-  await prisma.cashFlow.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.product.deleteMany();
-  await prisma.category.deleteMany();
-  await prisma.user.deleteMany();
-
-  // 1.5 USERS
-  const bcrypt = require('bcryptjs');
-  const hashedPassword = bcrypt.hashSync('admin123', 10);
-  const admin = await prisma.user.create({
+  console.log('Seeding Master Admin...');
+  const hashedPin = await bcrypt.hash('1234', 10);
+  await prisma.user.create({
     data: {
-      username: 'admin',
-      password: hashedPassword,
-      name: 'Admin User',
+      name: 'ADMINISTRADOR',
+      username: '1234',
+      password: hashedPin,
       role: 'ADMIN',
     },
   });
-  console.log('Admin user created:', admin.username);
+  console.log('Master Admin seeded.');
 
-  const waiter = await prisma.user.create({
-    data: {
-      username: 'waiter',
-      password: hashedPassword,
-      name: 'Waiter User',
-      role: 'WAITER',
+  console.log('Seeding categories...');
+  const categoryConfigs = [
+    { name: 'Pizzas', preparationPlace: PreparationPlace.KITCHEN },
+    { name: 'Hamburguesas', preparationPlace: PreparationPlace.KITCHEN },
+    { name: 'Hot Dogs', preparationPlace: PreparationPlace.KITCHEN },
+    { name: 'Alitas', preparationPlace: PreparationPlace.KITCHEN },
+    { name: 'Boneless', preparationPlace: PreparationPlace.KITCHEN },
+    { name: 'Bebidas', preparationPlace: PreparationPlace.WAITER_BAR },
+    { name: 'Extras', preparationPlace: PreparationPlace.WAITER_BAR },
+    { name: 'Postres', preparationPlace: PreparationPlace.WAITER_BAR },
+    { name: 'Sabritas', preparationPlace: PreparationPlace.WAITER_BAR },
+    { name: 'Snacks', preparationPlace: PreparationPlace.KITCHEN },
+  ];
+
+  const categories: Record<string, any> = {};
+  for (const config of categoryConfigs) {
+    categories[config.name] = await prisma.category.create({
+      data: config,
+    });
+  }
+  console.log('Categories seeded.');
+
+  console.log('Seeding tables and stools...');
+  // 30 Tables numbered 1-30
+  for (let i = 1; i <= 30; i++) {
+    await prisma.table.create({
+      data: {
+        number: i,
+        capacity: 4,
+        type: TableType.TABLE,
+      },
+    });
+  }
+  // 5 Stools numbered 101-105 (Bancos 1 al 5)
+  for (let i = 1; i <= 5; i++) {
+    await prisma.table.create({
+      data: {
+        number: 100 + i,
+        capacity: 1,
+        type: TableType.STOOL,
+      },
+    });
+  }
+  console.log('Tables and stools seeded.');
+
+  console.log('Seeding products...');
+  const products = [
+    // PIZZAS
+    {
+      name: 'Hawaiana Especial',
+      categoryId: categories['Pizzas'].id,
+      description: 'Jamón, piña, tocino y jalapeño, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
     },
-  });
-  console.log('Waiter user created:', waiter.username);
+    {
+      name: 'Hawaiana',
+      categoryId: categories['Pizzas'].id,
+      description: 'Jamón, piña, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'Pepperoni',
+      categoryId: categories['Pizzas'].id,
+      description: 'Pepperoni, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'Pastor',
+      categoryId: categories['Pizzas'].id,
+      description: 'Carne al pastor, cebolla, piña, jalapeño, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: '3 Quesos',
+      categoryId: categories['Pizzas'].id,
+      description: 'Queso amarillo, mozzarella philadelphia, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'Hawaiana con Pollo',
+      categoryId: categories['Pizzas'].id,
+      description: 'Jamón, pollo, piña, salsa de tomate, queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'Endiablada',
+      categoryId: categories['Pizzas'].id,
+      description: 'Jamón, tocino, champiñones, chileajo, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'Chicharron',
+      categoryId: categories['Pizzas'].id,
+      description: 'Chicharrón, cebolla morada, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 160}, {name: 'GD', price: 180}, {name: 'FM', price: 230}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'La Mr King',
+      categoryId: categories['Pizzas'].id,
+      description: 'Arrachera, doble queso, piña, aguacate, jalapeño, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 190}, {name: 'GD', price: 210}, {name: 'FM', price: 260}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
+    {
+      name: 'Carnes Frias',
+      categoryId: categories['Pizzas'].id,
+      description: 'Chorizo, pepperoni, tocino, jamón, salsa de tomate y queso mozzarella',
+      variants: [{name: 'MD', price: 190}, {name: 'GD', price: 210}, {name: 'FM', price: 260}],
+      canBeHalfAndHalf: true,
+      flavors: [],
+    },
 
-  // 2. CATEGORIES
-  const categoriesData = ['PIZZAS', 'HAMBURGUESAS', 'HOT DOGS', 'ALITAS', 'SNACKS', 'BEBIDAS', 'POSTRES', 'EXTRAS'];
-  const categories = await Promise.all(
-    categoriesData.map((name) =>
-      prisma.category.upsert({ where: { name }, update: {}, create: { name } })
-    )
-  );
+    // HAMBURGUESAS
+    {
+      name: 'Hamburguesa Sencilla',
+      categoryId: categories['Hamburguesas'].id,
+      description: 'Carne de res, queso amarillo, lechuga, chiles, tomate, cebolla, cátsup y mostaza',
+      variants: [{name: 'Sola', price: 60}, {name: 'Con Papas', price: 80}],
+      flavors: [],
+    },
+    {
+      name: 'Hamburguesa Hawaiana',
+      categoryId: categories['Hamburguesas'].id,
+      description: 'Carne de res, lechuga, piña, queso amarillo, queso mozzarella, jamón, tocino, chiles, cebolla, tomate, cátsup y mostaza',
+      variants: [{name: 'Sola', price: 75}, {name: 'Con Papas', price: 95}],
+      flavors: [],
+    },
+    {
+      name: 'Hamburguesa Especial',
+      categoryId: categories['Hamburguesas'].id,
+      description: 'Carne de res, queso amarillo, tocino, jamón, queso mozzarella, salchicha, lechuga, tomate, cebolla, chiles, cátsup y mostaza',
+      variants: [{name: 'Sola', price: 90}, {name: 'Con Papas', price: 110}],
+      flavors: [],
+    },
+    {
+      name: 'Hamburguesa Doble Carne',
+      categoryId: categories['Hamburguesas'].id,
+      description: 'Carne de res, queso amarillo, tocino, jamón, queso mozzarella, lechuga, tomate, cebolla, chiles, catsup y mostaza',
+      variants: [{name: 'Sola', price: 90}, {name: 'Con Papas', price: 110}],
+      flavors: [],
+    },
+    {
+      name: 'Hamburguesa Pollo',
+      categoryId: categories['Hamburguesas'].id,
+      description: 'Carne de pollo, queso amarillo, tocino, jamón, queso mozzarella, lechuga, tomate, cebolla, chiles, cátsup y mostaza',
+      variants: [{name: 'Sola', price: 60}, {name: 'Con Papas', price: 80}],
+      flavors: [],
+    },
+    {
+      name: 'Hamburguesa Sirloin',
+      categoryId: categories['Hamburguesas'].id,
+      description: 'Carne de sirlon, queso amarillo, lechuga, chiles, tomate, cebolla, catsup y mostaza',
+      variants: [{name: 'Sola', price: 120}, {name: 'Con Papas', price: 140}],
+      flavors: [],
+    },
 
-  const catMap = Object.fromEntries(categories.map((c) => [c.name, c.id]));
+    // HOT DOGS
+    {
+      name: 'Hot Dog Sencillo',
+      categoryId: categories['Hot Dogs'].id,
+      description: 'Salchicha, tomate, cebolla, chiles, cátsup y mostaza',
+      variants: [{name: 'Sola', price: 30}, {name: 'Con Papas', price: 45}],
+      flavors: [],
+    },
+    {
+      name: 'Hot Dog Hawaiano',
+      categoryId: categories['Hot Dogs'].id,
+      description: 'Salchicha, tocino, jamón, piña, queso amarillo, tomate, cebolla, chiles, catsup y mostaza',
+      variants: [{name: 'Sola', price: 45}, {name: 'Con Papas', price: 60}],
+      flavors: [],
+    },
+    {
+      name: 'Pizza Dog',
+      categoryId: categories['Hot Dogs'].id,
+      description: 'Salchicha, pepperoni, mayonesa, queso mozzarella',
+      variants: [{name: 'Única', price: 35}],
+      flavors: [],
+    },
 
-  // 3. PIZZAS (10 Specialties)
-  // Ensure requiresSizes: true
-  const pizzaSpecialties = [
-    { name: 'Hawaiana Especial', price: 160, description: 'Jamón, piña, tocino, jalapeño, salsa tomate, mozzarella' },
-    { name: 'Hawaiana', price: 160, description: 'Jamón, piña, salsa tomate, mozzarella' },
-    { name: 'Pepperoni', price: 160, description: 'Pepperoni, salsa tomate, mozzarella' },
-    { name: 'Pastor', price: 160, description: 'Carne al pastor, cebolla, piña, jalapeño, salsa tomate, mozzarella' },
-    { name: 'Choriqueso', price: 160, description: 'Chorizo, jalapeño, salsa tomate, mozzarella' },
-    { name: 'Mexicana', price: 190, description: 'Chorizo, jalapeño, cebolla, pimientos, champiñones, salsa tomate, mozzarella' },
-    { name: 'Endiablada', price: 160, description: 'Jamón, tocino, champiñones, chile ajo, salsa tomate, mozzarella' },
-    { name: 'Azteca', price: 190, description: 'Chorizo, frijoles, champiñones, jalapeño, cebolla, aguacate, salsa tomate, mozzarella' },
-    { name: 'Especial', price: 190, description: 'Chorizo, cebolla, aguacate, pepperoni, pimientos, champiñones, salsa tomate, mozzarella' },
-    { name: 'La Mr King', price: 190, description: 'Arrachera, doble queso, piña, aguacate, jalapeño, salsa tomate, mozzarella' },
+    // ALITAS Y BONELESS
+    {
+      name: 'Alitas',
+      categoryId: categories['Alitas'].id,
+      variants: [{name: '6pz', price: 85}, {name: '12pz', price: 160}, {name: '18pz', price: 230}, {name: '24pz', price: 290}, {name: '36pz', price: 380}],
+      flavors: ['BBQ', 'Mango Habanero', 'Bufalo', 'Red Hot', 'Naturales', 'Mango Chiltepin'],
+      maxFlavors: 2,
+    },
+    {
+      name: 'Boneless',
+      categoryId: categories['Boneless'].id,
+      variants: [{name: '6pz', price: 60}, {name: '12pz', price: 120}, {name: '18pz', price: 160}],
+      flavors: ['BBQ', 'Mango Habanero', 'Bufalo', 'Red Hot', 'Naturales', 'Mango Chiltepin'],
+      maxFlavors: 2,
+    },
+
+    // SNACKS
+    { name: 'Papas Gajo', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 80}] },
+    { name: 'Aros de Cebolla', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 80}] },
+    { name: 'Salchipapas', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 75}] },
+    { name: 'Papas a la Francesa', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 55}] },
+    { name: 'Dedos de Queso (5 PZ)', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 85}] },
+    { name: 'Salchipulpos', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 85}] },
+    { name: 'Papas Locas', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 80}] },
+
+    // EXTRAS
+    { name: 'Aderezo', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 10}] },
+    { name: 'Zanahoria', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 10}] },
+    { name: 'Salsa', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 10}] },
+    { name: 'Orilla de Queso MD', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 45}] },
+    { name: 'Orilla de Queso GD', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 65}] },
+    { name: 'Orilla de Queso FAM', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 85}] },
+    { name: 'Pizza Mitad y Mitad (Costo Extra)', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 15}] },
+    { name: 'Ingrediente Extra PZ', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 15}] },
+
+    // SABRITAS
+    { name: 'Pake-Taxo Mezcladito', categoryId: categories['Sabritas'].id, variants: [{name: 'Única', price: 26}] },
+    { name: 'Sabritas Originales', categoryId: categories['Sabritas'].id, variants: [{name: 'Única', price: 25}] },
+    { name: 'Doritos Nacho', categoryId: categories['Sabritas'].id, variants: [{name: 'Única', price: 24}] },
+
+    // POSTRES
+    { name: 'Matilda', categoryId: categories['Postres'].id, variants: [{name: 'Única', price: 40}] },
+    { name: 'Cheesecake', categoryId: categories['Postres'].id, variants: [{name: 'Única', price: 40}] },
+    { name: 'Frambuesa', categoryId: categories['Postres'].id, variants: [{name: 'Única', price: 40}] },
+    { name: 'Chispas', categoryId: categories['Postres'].id, variants: [{name: 'Única', price: 40}] },
+
+    // BEBIDAS
+    { name: 'Coca Cola 2.5 R', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 60}] },
+    { name: 'Sprite 2.5 R', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 55}] },
+    { name: 'Fanta Naranja 2.5', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 55}] },
+    { name: 'Sidral Mundet 2.5', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 55}] },
+    { name: 'Fresca 2.5', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 55}] },
+    { name: 'Agua Mineral 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Coca Cola 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Sprite 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Fanta Naranja 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Sidral Mundet 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Fresca 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Jugo del Valle Vidrio', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Michelada GD Clasica', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
+    { name: 'Michelada GD Maracuya', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
+    { name: 'Michelada GD Mango', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
+    { name: 'Michelada GD Fresa', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
+    { name: 'Michelada GD Tamarindo', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 75}] },
+    { name: 'Michelada GD Azulito', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 75}] },
+    { name: 'Michelada CH', categoryId: categories['Bebidas'].id, variants: [{name: 'Clasica', price: 50}, {name: 'Maracuya', price: 50}, {name: 'Mango', price: 50}, {name: 'Fresa', price: 50}, {name: 'Tamarindo', price: 50}, {name: 'Azulito', price: 50}] },
+    { name: 'Pacifico Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
+    { name: 'Modelo Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
+    { name: 'Corona Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
+    { name: 'Victoria Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
+    { name: 'Michelub Ultra Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
+    { name: 'Superior Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'XX Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Indio Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
+    { name: 'Heineken Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
+    { name: 'High Life Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] }
   ];
 
-  for (const pizza of pizzaSpecialties) {
+  for (const product of products) {
     await prisma.product.create({
-      data: {
-        name: pizza.name,
-        price: pizza.price,
-        description: pizza.description,
-        categoryId: catMap['PIZZAS'],
-        requiresSizes: true,
-      },
+      data: product,
     });
   }
 
-  // 4. HAMBURGUESAS (Base price = Sola)
-  const burgers = [
-    { name: 'Sencilla', price: 60, description: 'Carne res, queso amarillo, lechuga, chiles, tomate, cebolla, catsup, mostaza' },
-    { name: 'Hawaiana', price: 75, description: 'Carne res, lechuga, piña, queso amarillo, mozzarella, jamón, tocino, chiles, tomate...' },
-    { name: 'Especial', price: 90, description: 'Carne res, queso amarillo, tocino, jamón, mozzarella, salchicha, lechuga...' },
-    { name: 'Doble Carne', price: 90, description: 'Doble carne res, tocino, jamón, mozzarella, lechuga...' },
-    { name: 'Pollo', price: 60, description: 'Carne pollo, queso amarillo, lechuga, chiles, tomate...' },
-    { name: 'Sirloin', price: 120, description: 'Carne sirloin, queso amarillo, lechuga, chiles, tomate...' },
-  ];
-
-  for (const b of burgers) {
-    await prisma.product.create({
-      data: {
-        name: b.name,
-        price: b.price,
-        description: b.description,
-        categoryId: catMap['HAMBURGUESAS'],
-      },
-    });
-  }
-
-  // 5. HOT DOGS (Base price = Sencillo)
-  await prisma.product.createMany({
-    data: [
-      { name: 'Sencillo', price: 30, categoryId: catMap['HOT DOGS'] },
-      { name: 'Hawaiano', price: 45, categoryId: catMap['HOT DOGS'] },
-    ],
-  });
-
-  // 6. ALITAS
-  // CRÍTICO: 6 piezas = maxSauces: 1; > 6 piezas = maxSauces: 2, allowMultipleSauces: true
-  const wings = [
-    { name: 'Alitas 6 pz', price: 85, maxSauces: 1, allowMultipleSauces: false },
-    { name: 'Alitas 12 pz', price: 160, maxSauces: 2, allowMultipleSauces: true },
-    { name: 'Alitas 18 pz', price: 230, maxSauces: 2, allowMultipleSauces: true },
-    { name: 'Alitas 24 pz', price: 290, maxSauces: 2, allowMultipleSauces: true },
-    { name: 'Alitas 36 pz', price: 380, maxSauces: 2, allowMultipleSauces: true },
-  ];
-
-  for (const w of wings) {
-    await prisma.product.create({
-      data: {
-        name: w.name,
-        price: w.price,
-        categoryId: catMap['ALITAS'],
-        maxSauces: w.maxSauces,
-        allowMultipleSauces: w.allowMultipleSauces,
-      },
-    });
-  }
-
-  // 7. SNACKS
-  await prisma.product.createMany({
-    data: [
-      { name: 'Salchipapas', price: 75, categoryId: catMap['SNACKS'] },
-      { name: 'Papas a la francesa', price: 55, categoryId: catMap['SNACKS'] },
-      { name: 'Dedos de Queso (5 pz)', price: 85, categoryId: catMap['SNACKS'] },
-      { name: 'Salchipulpos', price: 85, categoryId: catMap['SNACKS'] },
-      { name: 'Papas Locas', price: 80, categoryId: catMap['SNACKS'] },
-    ],
-  });
-
-  // 8. BEBIDAS
-  await prisma.product.createMany({
-    data: [
-      { name: 'Coca Cola 2.75lts', price: 60, categoryId: catMap['BEBIDAS'] },
-      { name: 'Refresco Grande Sabores', price: 55, categoryId: catMap['BEBIDAS'] },
-      { name: 'Refresco 600ml', price: 30, categoryId: catMap['BEBIDAS'] },
-      { name: 'Michelada GD', price: 80, categoryId: catMap['BEBIDAS'] },
-      { name: 'Michelada CH', price: 50, categoryId: catMap['BEBIDAS'] },
-      { name: 'Cerveza Lata (Pacífico/Modelo/Ultra)', price: 35, categoryId: catMap['BEBIDAS'] },
-      { name: 'Cerveza Lata (Corona/Victoria/XX/Indio)', price: 30, categoryId: catMap['BEBIDAS'] },
-    ],
-  });
-
-  // 9. POSTRES & EXTRAS
-  await prisma.product.createMany({
-    data: [
-      { name: 'Pastel de Chocolate', price: 35, categoryId: catMap['POSTRES'] },
-      { name: 'Cheesecake de Frambuesa', price: 35, categoryId: catMap['POSTRES'] },
-      { name: 'Chocoflan', price: 35, categoryId: catMap['POSTRES'] },
-      { name: 'Aderezo', price: 10, categoryId: catMap['EXTRAS'] },
-      { name: 'Salsa', price: 10, categoryId: catMap['EXTRAS'] },
-    ],
-  });
-
-  // 10. TABLES
-  await prisma.table.deleteMany();
-  await prisma.table.createMany({
-    data: [
-      { number: 1, status: 'AVAILABLE' },
-      { number: 2, status: 'AVAILABLE' },
-      { number: 3, status: 'AVAILABLE' },
-      { number: 4, status: 'AVAILABLE' },
-      { number: 5, status: 'AVAILABLE' },
-      { number: 6, status: 'AVAILABLE' },
-    ],
-  });
-
-  console.log('Seed completed successfully!');
+  console.log('Products seeded.');
+  console.log('Seeding process finished successfully.');
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
   });

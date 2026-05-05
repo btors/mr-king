@@ -16,9 +16,11 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
   // We'll use 4000 directly for NestJS to avoid Next.js proxy overhead if no proxy is setup
   const url = `${API_BASE_URL}${cleanEndpoint}`;
 
+  const token = typeof window !== 'undefined' ? localStorage.getItem('mr-king-token') : null;
+
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${SIMULATED_ADMIN_TOKEN}`,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...headers,
   };
 

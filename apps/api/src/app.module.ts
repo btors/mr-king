@@ -13,6 +13,8 @@ import { OrdersModule } from './orders/orders.module';
 import { PizzasModule } from './pizzas/pizzas.module';
 import { CashModule } from './cash/cash.module';
 import { TablesModule } from './tables/tables.module';
+import { ShiftsModule } from './shifts/shifts.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { TablesModule } from './tables/tables.module';
     PizzasModule,
     CashModule,
     TablesModule,
+    ShiftsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

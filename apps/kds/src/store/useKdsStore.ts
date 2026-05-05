@@ -19,8 +19,11 @@ export interface Order {
   status: OrderStatus;
   total: number;
   createdAt: string;
+  orderType?: 'EAT_IN' | 'TAKE_AWAY' | 'DELIVERY';
+  clientName?: string;
   table?: {
     number: number;
+    type?: 'TABLE' | 'STOOL';
   };
   items: OrderItem[];
 }
@@ -29,6 +32,7 @@ interface KdsState {
   orders: Order[];
   socket: Socket | null;
   isLoading: boolean;
+  isConnected: boolean;
   
   // Actions
   connect: () => void;
@@ -43,19 +47,36 @@ export const useKdsStore = create<KdsState>((set, get) => ({
   orders: [],
   socket: null,
   isLoading: false,
+  isConnected: false,
 
   connect: () => {
     if (get().socket) return;
 
-    // Connect to the 'orders' namespace
     const socket = io(`${API_BASE_URL}/orders`);
 
     socket.on('connect', () => {
       console.log('Connected to KDS Gateway');
+      set({ isConnected: true });
+      get().fetchOrders(); // Re-sync when connection is established
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from KDS Gateway');
+      set({ isConnected: false });
+    });
+
+    socket.on('connect_error', () => {
+      console.log('KDS Connection Error');
+      set({ isConnected: false });
     });
 
     socket.on('orderCreated', (newOrder: Order) => {
       console.log('New order received:', newOrder);
+      
+      // Play notification sound
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log('Audio play blocked until user interaction'));
+
       set((state) => ({ orders: [newOrder, ...state.orders] }));
     });
 
@@ -80,7 +101,7 @@ export const useKdsStore = create<KdsState>((set, get) => ({
   fetchOrders: async () => {
     set({ isLoading: true });
     try {
-      const response = await fetch(`${API_BASE_URL}/orders`);
+      const response = await fetch(`${API_BASE_URL}/orders?place=KITCHEN`);
       if (!response.ok) throw new Error('Failed to fetch orders');
       const data = await response.json();
       set({ orders: data });

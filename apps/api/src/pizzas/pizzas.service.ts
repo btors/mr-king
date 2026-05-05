@@ -16,14 +16,21 @@ export class PizzasService {
     });
 
     return pizzas.map((p) => {
-      const basePrice = Number(p.price);
+      const variants = Array.isArray(p.variants) ? p.variants : [];
+      const getPrice = (name: string) => {
+         const v = variants.find((val: any) => val && val.name === name);
+         return v ? Number((v as any).price) : 0;
+      };
+      
+      const mdPrice = getPrice('MD');
+      
       return {
         id: p.id,
         name: p.name,
         prices: {
-          MD: basePrice,
-          GD: basePrice + 20,
-          FM: basePrice + 70,
+          MD: mdPrice || 0,
+          GD: getPrice('GD') || (mdPrice ? mdPrice + 20 : 0),
+          FM: getPrice('FM') || (mdPrice ? mdPrice + 70 : 0),
         },
       };
     });

@@ -18,14 +18,16 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
   const { categories } = usePOSStore();
   const catName = categories.find(c => c.id === product.categoryId)?.name || '';
 
-  const isWings = catName === 'ALITAS';
-  const isMichelada = catName === 'BEBIDAS' && product.name.includes('Michelada');
+  const isWings = catName.toUpperCase() === 'ALITAS';
+  const isMichelada = catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada');
 
-  const basePrice = typeof product.price === 'string' ? parseFloat(product.price) : product.price as number;
+  // Use pre-selected price from MenuView hack if available, else default to first variant
+  const basePrice = (product as any).price || product.variants[0]?.price || 0;
 
   // Wings state
   const [selectedSauces, setSelectedSauces] = useState<string[]>([]);
-  const maxSauces = product.maxSauces ?? 1;
+  const wingFlavors = product.flavors && product.flavors.length > 0 ? product.flavors : WING_SAUCES;
+  const maxSauces = product.maxFlavors ?? 1;
   const limitReached = selectedSauces.length >= maxSauces;
 
   // Michelada state
@@ -50,10 +52,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
     if (isWings) {
       const sauceLabel = selectedSauces.join(' + ');
       name = `${product.name} (${sauceLabel})`;
-      metadata = { sauces: selectedSauces };
+      metadata = { ...((product as any).metadata || {}), sauces: selectedSauces };
     } else if (isMichelada) {
       name = `${product.name} ${micFlavor}`;
-      metadata = { flavor: micFlavor };
+      metadata = { ...((product as any).metadata || {}), flavor: micFlavor };
     }
 
     onConfirm({ unitPrice: basePrice, name, metadata });
@@ -88,7 +90,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
               )}
             </div>
             <span className="text-3xl font-black text-amber-400 italic flex-none">
-              ${basePrice.toFixed(0)}
+              ${basePrice.toFixed(2)}
             </span>
           </div>
         </div>
@@ -121,8 +123,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
               </div>
 
               {/* Sauce pills */}
-              <div className="grid grid-cols-2 gap-3">
-                {WING_SAUCES.map(sauce => {
+              <div className={`grid grid-cols-2 gap-3 p-2 rounded-2xl transition-all ${isWings && selectedSauces.length === 0 ? 'bg-red-500/5 ring-2 ring-red-500/20 animate-pulse' : ''}`}>
+                {wingFlavors.map(sauce => {
                   const isSelected = selectedSauces.includes(sauce);
                   const isDisabled = !isSelected && limitReached;
 
@@ -159,7 +161,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
                 })}
               </div>
 
-              {/* Hint when limit reached */}
+              {/* Hint when limit reached / missing flavor */}
               <AnimatePresence>
                 {limitReached && (
                   <motion.p
@@ -169,6 +171,16 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
                     className="text-amber-500/80 text-xs font-bold text-center"
                   >
                     ✓ Límite de {maxSauces} salsa{maxSauces > 1 ? 's' : ''} alcanzado
+                  </motion.p>
+                )}
+                {isWings && selectedSauces.length === 0 && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="text-red-500 text-xs font-black text-center uppercase tracking-widest"
+                  >
+                    ⚠️ Debes elegir al menos una salsa
                   </motion.p>
                 )}
               </AnimatePresence>

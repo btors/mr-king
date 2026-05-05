@@ -13,20 +13,33 @@ export interface User {
 export interface Table {
   id: string;
   number: number;
+  capacity?: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'OUT_OF_SERVICE';
+  type: 'TABLE' | 'STOOL';
+}
+
+export type OrderType = 'EAT_IN' | 'TAKE_AWAY' | 'DELIVERY';
+
+export interface ActiveOrder {
+  id: string;
+  clientName?: string;
+  orderType: OrderType;
+  status: string;
+  total: number;
+  createdAt: string;
+  items: any[];
 }
 
 export interface Product {
   id: string;
   name: string;
-  price: string | number; // Decimal from API
   categoryId: string;
   description?: string;
   image?: string;
   isActive: boolean;
-  requiresSizes: boolean;
-  allowMultipleSauces: boolean;
-  maxSauces: number;
+  variants: { name: string; price: number }[];
+  flavors?: string[];
+  maxFlavors?: number;
 }
 
 export interface PizzaConfig {
@@ -60,9 +73,22 @@ interface POSState {
   user: User | null;
   selectedTable: Table | null;
   cart: CartItem[];
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; preparationPlace: 'KITCHEN' | 'WAITER_BAR' }[];
   products: Product[];
   tables: Table[];
+  
+  offlineOrders: any[];
+  isSubmitting: boolean;
+  isOffline: boolean;
+  
+  // Omnichannel
+  orderType: OrderType;
+  clientName: string;
+  activeOrders: ActiveOrder[];
+  
+  // Shift Management
+  currentShift: any | null;
+  isShiftLoading: boolean;
   
   // Actions
   login: (pin: string) => Promise<boolean>;
@@ -72,8 +98,11 @@ interface POSState {
   addToCart: (item: Omit<CartItem, 'tempId' | 'status'>) => void;
   removeFromCart: (tempId: string) => void;
   updateQuantity: (tempId: string, quantity: number) => void;
+  updateNotes: (tempId: string, notes: string) => void;
   clearCart: () => void;
   fetchTables: () => Promise<void>;
+  processOfflineOrders: () => Promise<void>;
+  setOfflineStatus: (status: boolean) => void;
   
   // Getters
   calculateItemPrice: (item: CartItem) => number;
@@ -83,6 +112,19 @@ interface POSState {
   loadTableBill: (tableId: string) => Promise<void>;
   payTable: (tableId: string) => Promise<boolean>;
   clearDrafts: () => void;
+  
+  // Omnichannel actions
+  startChannelOrder: (orderType: OrderType, clientName: string) => void;
+  fetchActiveOrders: (orderType: OrderType) => Promise<void>;
+  loadOrderForEdit: (order: ActiveOrder) => void;
+  payChannelOrder: (orderId: string) => Promise<boolean>;
+  
+  // Shift Actions
+  checkCurrentShift: () => Promise<void>;
+  openShift: (openingBalance: number) => Promise<boolean>;
+  closeShift: (actualBalance: number) => Promise<boolean>;
+  addExpense: (amount: number, description: string) => Promise<boolean>;
+  clearOfflineOrders: () => void;
 }
 
 export const usePOSStore = create<POSState>()(
@@ -94,10 +136,17 @@ export const usePOSStore = create<POSState>()(
       categories: [],
       products: [],
       tables: [],
+      offlineOrders: [],
+      isSubmitting: false,
+      isOffline: false,
+      currentShift: null,
+      isShiftLoading: true,
+      orderType: 'EAT_IN',
+      clientName: '',
+      activeOrders: [],
 
       login: async (pin: string) => {
         try {
-          // Fetch dynamic PINs and IDs from backend
           const pins = await api.get<{ 
             adminPin: string; 
             waiterPin: string;
@@ -105,12 +154,18 @@ export const usePOSStore = create<POSState>()(
             waiterId: string;
           }>('/auth/pin');
           
-          if (pin === pins.adminPin) {
-            set({ user: { id: pins.adminId, name: 'Admin King', role: 'ADMIN' } });
-            return true;
-          }
-          if (pin === pins.waiterPin) {
-            set({ user: { id: pins.waiterId, name: 'Mesero Pro', role: 'WAITER' } });
+          let username = pin; 
+          
+          if (!username) return false;
+
+          const response = await api.post<{ access_token: string; user: any }>('/auth/login', {
+            username,
+            password: pin
+          });
+
+          if (response?.access_token) {
+            localStorage.setItem('mr-king-token', response.access_token);
+            set({ user: response.user });
             return true;
           }
           return false;
@@ -121,27 +176,46 @@ export const usePOSStore = create<POSState>()(
       },
 
       logout: () => {
-        set({ user: null, selectedTable: null, cart: [] });
         if (typeof window !== 'undefined') {
-          window.location.href = '/'; // Go to PIN screen
+          localStorage.removeItem('mr-king-token');
+          window.location.href = '/';
         }
+        set({ user: null, selectedTable: null, cart: [], currentShift: null });
       },
 
       setCatalog: (categories, products) => set({ categories, products }),
 
       selectTable: (table) => {
-        // ALWAYS clear the cart first to avoid leakage between tables
         set({ cart: [], selectedTable: table });
-        
-        // If the table is occupied, load its current bill
         if (table?.status === 'OCCUPIED') {
           get().loadTableBill(table.id);
         }
       },
 
-      addToCart: (item) => set((state) => ({
-        cart: [...state.cart, { ...item, tempId: Math.random().toString(36).substring(7), status: 'DRAFT' }]
-      })),
+      addToCart: (item) => set((state) => {
+        const existingIndex = state.cart.findIndex(i => 
+          i.productId === item.productId && 
+          i.status === 'DRAFT' && 
+          JSON.stringify(i.metadata) === JSON.stringify(item.metadata)
+        );
+
+        if (existingIndex !== -1) {
+          const newCart = [...state.cart];
+          newCart[existingIndex] = {
+            ...newCart[existingIndex],
+            quantity: newCart[existingIndex].quantity + item.quantity
+          };
+          return { cart: newCart };
+        }
+
+        return {
+          cart: [...state.cart, { 
+            ...item, 
+            tempId: Math.random().toString(36).substring(7), 
+            status: 'DRAFT' 
+          }]
+        };
+      }),
 
       removeFromCart: (tempId) => set((state) => ({
         cart: state.cart.filter((i) => i.tempId !== tempId || i.status === 'SENT')
@@ -150,6 +224,12 @@ export const usePOSStore = create<POSState>()(
       updateQuantity: (tempId, quantity) => set((state) => ({
         cart: state.cart.map((i) => 
           (i.tempId === tempId && i.status === 'DRAFT') ? { ...i, quantity: Math.max(1, quantity) } : i
+        )
+      })),
+      
+      updateNotes: (tempId, notes) => set((state) => ({
+        cart: state.cart.map((i) => 
+          (i.tempId === tempId && i.status === 'DRAFT') ? { ...i, notes } : i
         )
       })),
 
@@ -164,6 +244,33 @@ export const usePOSStore = create<POSState>()(
         }
       },
 
+      setOfflineStatus: (isOffline) => set({ isOffline }),
+
+      processOfflineOrders: async () => {
+        const { offlineOrders, isSubmitting } = get();
+        if (offlineOrders.length === 0 || isSubmitting) return;
+
+        set({ isSubmitting: true });
+        const remaining = [...offlineOrders];
+        const toRetry = remaining.shift();
+
+        try {
+          await api.post('/orders', toRetry);
+          set({ offlineOrders: remaining });
+          // If we had more, they will be processed in the next interval/call
+        } catch (err: any) {
+          console.error('Retry offline order failed:', err);
+          
+          // MISSION 3: If it's a client error (4xx), remove it from the queue
+          if (err.response?.status >= 400 && err.response?.status < 500) {
+            console.error('Offline order was invalid (4xx), removing from queue:', toRetry);
+            set({ offlineOrders: remaining });
+          }
+        } finally {
+          set({ isSubmitting: false });
+        }
+      },
+
       calculateItemPrice: (item) => {
         return item.unitPrice * item.quantity;
       },
@@ -174,14 +281,19 @@ export const usePOSStore = create<POSState>()(
       },
 
       submitOrder: async () => {
-        const { cart, user, selectedTable } = get();
+        const { cart, user, selectedTable, isSubmitting } = get();
+        if (isSubmitting) return false;
+
         const draftItems = cart.filter(i => i.status === 'DRAFT');
-        
         if (draftItems.length === 0 || !user) return false;
+
+        set({ isSubmitting: true });
 
         const payload = {
           waiterId: user.id,
-          tableId: selectedTable?.id,
+          tableId: selectedTable?.id || null,
+          orderType: get().orderType,
+          clientName: get().clientName || undefined,
           items: draftItems.map(item => {
             const config: any = {};
             if (item.metadata) {
@@ -189,13 +301,22 @@ export const usePOSStore = create<POSState>()(
               if (item.metadata.size) config.size = item.metadata.size;
               if (item.metadata.isCombo) config.isCombo = true;
               
-              // Pizza halves mapping
               if (item.metadata.halfAId) {
-                config.halfA = { productId: item.metadata.halfAId };
+                config.halfA = { 
+                  productId: item.metadata.halfAId,
+                  product: { name: item.metadata.halfAName }
+                };
               }
               if (item.metadata.halfBId) {
-                config.halfB = { productId: item.metadata.halfBId };
+                config.halfB = { 
+                  productId: item.metadata.halfBId,
+                  product: { name: item.metadata.halfBName }
+                };
               }
+
+              if (item.metadata.sauces) config.sauces = item.metadata.sauces;
+              if (item.metadata.flavor) config.flavor = item.metadata.flavor;
+              if (item.metadata.variants) config.variants = item.metadata.variants;
             }
 
             return {
@@ -205,27 +326,36 @@ export const usePOSStore = create<POSState>()(
               notes: item.notes,
               config
             };
-          }),
-          orderType: 'EAT_IN'
+          })
         };
 
         try {
           await api.post('/orders', payload);
           
-          // Move DRAFT to SENT instead of clearing
           set((state) => ({
-            cart: state.cart.map(i => i.status === 'DRAFT' ? { ...i, status: 'SENT' as const } : i)
+            cart: state.cart.map(i => i.status === 'DRAFT' ? { ...i, status: 'SENT' as const } : i),
+            isOffline: false
           }));
 
-          // Refresh tables to reflect OCCUPIED status
           const tables = await api.get<Table[]>('/tables');
           const updatedTable = tables.find(t => t.id === selectedTable?.id);
           set({ tables, selectedTable: updatedTable || selectedTable });
           return true;
-        } catch (err) {
-          console.error('Order submission failed. Payload:', payload);
-          console.error('Error details:', err);
+        } catch (err: any) {
+          // If network error (offline)
+          if (!window.navigator.onLine || err.message === 'Network Error' || !err.response) {
+            set((state) => ({
+              offlineOrders: [...state.offlineOrders, payload],
+              cart: state.cart.map(i => i.status === 'DRAFT' ? { ...i, status: 'SENT' as const } : i),
+              isOffline: true
+            }));
+            return true; // Return true as "queued"
+          }
+          
+          console.error('Order submission failed:', err);
           return false;
+        } finally {
+          set({ isSubmitting: false });
         }
       },
 
@@ -256,16 +386,21 @@ export const usePOSStore = create<POSState>()(
       },
 
       payTable: async (tableId: string) => {
+        const { isSubmitting } = get();
+        if (isSubmitting) return false;
+
+        set({ isSubmitting: true });
         try {
           await api.post(`/tables/${tableId}/pay`, {});
           set({ cart: [], selectedTable: null });
-          // Refresh tables to see it available
           const tables = await api.get<Table[]>('/tables');
           set({ tables });
           return true;
         } catch (err) {
           console.error('Failed to pay table:', err);
           return false;
+        } finally {
+          set({ isSubmitting: false });
         }
       },
 
@@ -276,9 +411,112 @@ export const usePOSStore = create<POSState>()(
       clearEverything: () => {
         if (typeof window !== 'undefined') {
           localStorage.clear();
-          set({ user: null, selectedTable: null, cart: [] });
+          set({ user: null, selectedTable: null, cart: [], currentShift: null, orderType: 'EAT_IN', clientName: '', activeOrders: [] });
           window.location.reload();
         }
+      },
+
+      // ── Omnichannel ──
+      startChannelOrder: (orderType, clientName) => {
+        set({ cart: [], selectedTable: null, orderType, clientName });
+      },
+
+      fetchActiveOrders: async (orderType) => {
+        try {
+          const orders = await api.get<ActiveOrder[]>(`/orders?orderType=${orderType}&status=PENDING,PREPARING,READY`);
+          set({ 
+            activeOrders: Array.isArray(orders) 
+              ? orders.map(o => ({ ...o, total: Number(o.total) })) 
+              : [] 
+          });
+        } catch (err) {
+          console.error('Failed to fetch active orders:', err);
+          set({ activeOrders: [] });
+        }
+      },
+
+      loadOrderForEdit: (order) => {
+        const cartItems: CartItem[] = order.items.map((item: any) => ({
+          tempId: Math.random().toString(36).substring(7),
+          productId: item.productId,
+          name: item.product?.name || item.name || 'Producto',
+          quantity: item.quantity,
+          unitPrice: Number(item.price),
+          status: 'SENT' as const,
+          metadata: item.pizzaConfig ? { ...item.pizzaConfig } : undefined,
+        }));
+        set({ 
+          cart: cartItems, 
+          orderType: order.orderType as OrderType,
+          clientName: order.clientName || '',
+          selectedTable: null,
+        });
+      },
+
+      payChannelOrder: async (orderId: string) => {
+        const { isSubmitting } = get();
+        if (isSubmitting) return false;
+        set({ isSubmitting: true });
+        try {
+          await api.post(`/orders/${orderId}/pay`, {});
+          set({ cart: [], selectedTable: null, clientName: '', orderType: 'EAT_IN' });
+          return true;
+        } catch (err) {
+          console.error('Failed to pay order:', err);
+          return false;
+        } finally {
+          set({ isSubmitting: false });
+        }
+      },
+
+      checkCurrentShift: async () => {
+        set({ isShiftLoading: true });
+        try {
+          const shift = await api.get<any>('/shifts/current');
+          set({ currentShift: shift, isShiftLoading: false });
+        } catch (err: any) {
+          // 404 means no open shift
+          set({ currentShift: null, isShiftLoading: false });
+        }
+      },
+
+      openShift: async (openingBalance: number) => {
+        try {
+          const shift = await api.post<any>('/shifts/open', { openingBalance });
+          set({ currentShift: shift });
+          return true;
+        } catch (err) {
+          console.error('Failed to open shift:', err);
+          return false;
+        }
+      },
+
+      closeShift: async (actualBalance: number) => {
+        try {
+          await api.post('/shifts/close', { actualBalance });
+          set({ currentShift: null, user: null, cart: [], selectedTable: null });
+          if (typeof window !== 'undefined') {
+            window.location.href = '/';
+          }
+          return true;
+        } catch (err) {
+          console.error('Failed to close shift:', err);
+          return false;
+        }
+      },
+
+      addExpense: async (amount: number, description: string) => {
+        try {
+          await api.post('/cash/expense', { amount, description });
+          return true;
+        } catch (err) {
+          console.error('Failed to register expense:', err);
+          return false;
+        }
+      },
+
+      clearOfflineOrders: () => {
+        set({ offlineOrders: [] });
       },
     }),
     {
@@ -286,7 +524,8 @@ export const usePOSStore = create<POSState>()(
       partialize: (state) => ({ 
         user: state.user, 
         selectedTable: state.selectedTable, 
-        cart: state.cart 
+        cart: state.cart,
+        offlineOrders: state.offlineOrders
       }),
     }
   )

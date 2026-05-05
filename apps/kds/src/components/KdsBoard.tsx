@@ -6,7 +6,7 @@ import { OrderCard } from './OrderCard';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export const KdsBoard: React.FC = () => {
-  const { orders, connect, disconnect, fetchOrders, isLoading } = useKdsStore();
+  const { orders, connect, disconnect, fetchOrders, isLoading, isConnected } = useKdsStore();
 
   useEffect(() => {
     connect();
@@ -37,9 +37,18 @@ export const KdsBoard: React.FC = () => {
           <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase leading-none">
             MR-KING <span className="text-blue-500">KITCHEN</span>
           </h1>
-          <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px] mt-3 ml-1">
-            Kitchen Display System • Live Updates • Station 01
-          </p>
+          <div className="flex items-center gap-2 mt-3 ml-1">
+            <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">
+              Kitchen Display System • Station 01
+            </p>
+            <div className="w-px h-2 bg-white/10 mx-1" />
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]'}`} />
+              <span className={`text-[9px] font-black uppercase tracking-widest ${isConnected ? 'text-emerald-500' : 'text-red-500'}`}>
+                {isConnected ? 'Sistema Conectado' : 'Sin Conexión'}
+              </span>
+            </div>
+          </div>
         </div>
         
         <div className="flex gap-4">
@@ -57,10 +66,10 @@ export const KdsBoard: React.FC = () => {
       <main className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden">
         {/* PENDING COLUMN */}
         <section className="flex flex-col gap-6 overflow-hidden">
-          <div className="flex items-center gap-4 px-6 py-4 bg-amber-500/10 border border-amber-500/20 rounded-[1.5rem]">
-            <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.5)]" />
-            <h2 className="text-2xl font-black text-amber-500 italic uppercase tracking-tighter">Nuevos</h2>
-            <span className="ml-auto bg-amber-500/20 text-amber-500 px-3 py-1 rounded-xl text-sm font-black">
+          <div className="flex items-center gap-4 px-6 py-4 bg-zinc-800/20 border border-white/10 rounded-[1.5rem]">
+            <div className="w-3 h-3 bg-zinc-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(113,113,122,0.5)]" />
+            <h2 className="text-2xl font-black text-zinc-300 italic uppercase tracking-tighter">Pendientes</h2>
+            <span className="ml-auto bg-zinc-800/50 text-zinc-400 px-3 py-1 rounded-xl text-sm font-black">
               {pendingOrders.length}
             </span>
           </div>
@@ -72,7 +81,7 @@ export const KdsBoard: React.FC = () => {
             </AnimatePresence>
             {pendingOrders.length === 0 && (
               <div className="h-40 border-2 border-dashed border-white/5 rounded-[2rem] flex items-center justify-center">
-                <p className="text-zinc-700 font-bold uppercase tracking-widest text-xs">Sin órdenes nuevas</p>
+                <p className="text-zinc-700 font-bold uppercase tracking-widest text-xs">Sin pendientes</p>
               </div>
             )}
           </div>
@@ -80,10 +89,10 @@ export const KdsBoard: React.FC = () => {
 
         {/* PREPARING COLUMN */}
         <section className="flex flex-col gap-6 overflow-hidden">
-          <div className="flex items-center gap-4 px-6 py-4 bg-blue-500/10 border border-blue-500/20 rounded-[1.5rem]">
-            <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(59,130,246,0.5)]" />
-            <h2 className="text-2xl font-black text-blue-500 italic uppercase tracking-tighter">Cocinando</h2>
-            <span className="ml-auto bg-blue-500/20 text-blue-500 px-3 py-1 rounded-xl text-sm font-black">
+          <div className="flex items-center gap-4 px-6 py-4 bg-amber-500/10 border border-amber-500/20 rounded-[1.5rem]">
+            <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.5)]" />
+            <h2 className="text-2xl font-black text-amber-500 italic uppercase tracking-tighter">Preparando</h2>
+            <span className="ml-auto bg-amber-500/20 text-amber-500 px-3 py-1 rounded-xl text-sm font-black">
               {preparingOrders.length}
             </span>
           </div>
@@ -95,7 +104,7 @@ export const KdsBoard: React.FC = () => {
             </AnimatePresence>
             {preparingOrders.length === 0 && (
               <div className="h-40 border-2 border-dashed border-white/5 rounded-[2rem] flex items-center justify-center">
-                <p className="text-zinc-700 font-bold uppercase tracking-widest text-xs">Cocina vacía</p>
+                <p className="text-zinc-700 font-bold uppercase tracking-widest text-xs">Sin preparación activa</p>
               </div>
             )}
           </div>
@@ -103,10 +112,10 @@ export const KdsBoard: React.FC = () => {
 
         {/* READY COLUMN */}
         <section className="flex flex-col gap-6 overflow-hidden">
-          <div className="flex items-center gap-4 px-6 py-4 bg-green-500/10 border border-green-500/20 rounded-[1.5rem]">
-            <div className="w-3 h-3 bg-green-500 rounded-full shadow-[0_0_12px_rgba(34,197,94,0.5)]" />
-            <h2 className="text-2xl font-black text-green-500 italic uppercase tracking-tighter">Listos</h2>
-            <span className="ml-auto bg-green-500/20 text-green-500 px-3 py-1 rounded-xl text-sm font-black">
+          <div className="flex items-center gap-4 px-6 py-4 bg-emerald-500/10 border border-emerald-500/20 rounded-[1.5rem]">
+            <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_12px_rgba(16,185,129,0.5)]" />
+            <h2 className="text-2xl font-black text-emerald-500 italic uppercase tracking-tighter">Listos</h2>
+            <span className="ml-auto bg-emerald-500/20 text-emerald-500 px-3 py-1 rounded-xl text-sm font-black">
               {readyOrders.length}
             </span>
           </div>

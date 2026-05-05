@@ -15,16 +15,20 @@ interface ProductFromAPI {
   maxSauces: number;
   categoryId: string;
   category?: { id: string; name: string };
+  variants: { name: string; price: number }[];
+  flavors?: string[];
+  maxFlavors?: number;
 }
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ProductFromAPI[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | 'ALL'>('ALL');
   
   // Form state
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<ProductFormData | null>(null);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -34,15 +38,15 @@ export default function AdminProductsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Let's assume standard REST endpoints exist in NestJS
-      // Fallback to empty array if endpoint errors (e.g. not implemented yet by backend dev)
-      const cachedCategories = await api.get<any[]>('/categories').catch(() => [
-        { id: '1', name: 'Pizzas' }, { id: '2', name: 'Hamburguesas' }
+      const [fetchedCategories, fetchedProducts] = await Promise.all([
+        api.get<any[]>('/categories'),
+        api.get<any[]>('/products')
       ]);
-      const data = await api.get<ProductFromAPI[]>('/products').catch(() => []);
       
-      setCategories(cachedCategories);
-      setProducts(data);
+      setCategories(fetchedCategories);
+      setProducts(fetchedProducts);
+      
+      // If we don't have a selection yet, maybe default to ALL or first category
     } catch (e) {
       console.error(e);
     } finally {
@@ -50,17 +54,12 @@ export default function AdminProductsPage() {
     }
   };
 
+  const filteredProducts = selectedCategoryId === 'ALL' 
+    ? products 
+    : products.filter(p => p.categoryId === selectedCategoryId);
+
   const handleEditClick = (p: ProductFromAPI) => {
-    setEditingProduct({
-      id: p.id,
-      name: p.name,
-      price: typeof p.price === 'string' ? parseFloat(p.price) : p.price,
-      categoryId: p.categoryId,
-      isActive: p.isActive,
-      requiresSizes: p.requiresSizes,
-      allowMultipleSauces: p.allowMultipleSauces,
-      maxSauces: p.maxSauces,
-    });
+    setEditingProduct(p);
     setIsFormOpen(true);
   };
 
@@ -69,7 +68,7 @@ export default function AdminProductsPage() {
     setIsFormOpen(true);
   };
 
-  const handleFormSubmit = async (formData: ProductFormData) => {
+  const handleFormSubmit = async (formData: any) => {
     try {
       setIsSubmitting(true);
       if (formData.id) {
@@ -110,7 +109,7 @@ export default function AdminProductsPage() {
   return (
     <div className="h-full flex relative">
       {/* List Section */}
-      <div className="flex-1 flex flex-col min-w-0 p-8 space-y-6">
+      <div className="flex-1 flex flex-col min-w-0 p-8 space-y-6 overflow-hidden">
         <header className="flex justify-between items-center bg-surface-alt p-6 rounded-3xl border border-white/5">
           <div>
             <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white">Gestión de Productos</h2>
@@ -125,6 +124,33 @@ export default function AdminProductsPage() {
           </button>
         </header>
 
+        {/* Category Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar no-scrollbar">
+          <button
+            onClick={() => setSelectedCategoryId('ALL')}
+            className={`px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all border ${
+              selectedCategoryId === 'ALL' 
+                ? 'bg-accent text-black border-accent' 
+                : 'bg-zinc-900 text-zinc-500 border-white/5 hover:border-white/10'
+            }`}
+          >
+            Todas
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategoryId(cat.id)}
+              className={`px-6 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all border whitespace-nowrap ${
+                selectedCategoryId === cat.id 
+                  ? 'bg-accent text-black border-accent' 
+                  : 'bg-zinc-900 text-zinc-500 border-white/5 hover:border-white/10'
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
            <div className="flex-1 flex items-center justify-center font-bold text-zinc-500 animate-pulse">
              Cargando Base de Datos...
@@ -136,15 +162,15 @@ export default function AdminProductsPage() {
                 <tr>
                   <th className="p-4 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5">Estatus</th>
                   <th className="p-4 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5">Nombre</th>
-                  <th className="p-4 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5">Precio</th>
+                  <th className="p-4 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5">Variantes / Precios</th>
                   <th className="p-4 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-white/5 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 && (
-                  <tr><td colSpan={4} className="p-8 text-center text-zinc-500 font-bold italic">No hay productos. Crea uno o verifica que el backend responda en puerto 3000.</td></tr>
+                {filteredProducts.length === 0 && (
+                  <tr><td colSpan={4} className="p-8 text-center text-zinc-500 font-bold italic">No hay productos en esta categoría.</td></tr>
                 )}
-                {products.map(p => (
+                {filteredProducts.map(p => (
                   <tr key={p.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
                     <td className="p-4 w-24">
                       {p.isActive ? 
@@ -161,7 +187,19 @@ export default function AdminProductsPage() {
                         </div>
                       )}
                     </td>
-                    <td className="p-4 font-black italic text-accent">${typeof p.price === 'number' ? p.price.toFixed(2) : parseFloat(p.price).toFixed(2)}</td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-2">
+                        {p.variants?.map((v, i) => (
+                          <span key={i} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-md text-zinc-400 font-bold whitespace-nowrap">
+                            <span className="text-accent uppercase tracking-tighter mr-1">{v.name}:</span>
+                            <span className="text-white font-black italic">${Number(v.price).toFixed(0)}</span>
+                          </span>
+                        ))}
+                        {(!p.variants || p.variants.length === 0) && (
+                           <span className="font-black italic text-accent">${Number(p.price).toFixed(0)}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 

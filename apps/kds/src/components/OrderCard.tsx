@@ -11,24 +11,66 @@ interface OrderCardProps {
 export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   const updateOrderStatus = useKdsStore((state) => state.updateOrderStatus);
 
-  const formatMetadata = (item: any) => {
-    const parts: string[] = [];
+  const renderMetadata = (item: any) => {
     const config = item.pizzaConfig || {};
-    
-    if (config.isHalfAndHalf) {
-      parts.push(`Mitad A: ${config.halfAId || 'Sabor A'} | Mitad B: ${config.halfBId || 'Sabor B'}`);
-    }
+    const metadataElements: React.ReactNode[] = [];
+
+    // Size Rendering (Very important for Chef)
     if (config.size) {
-      parts.push(`Tamaño: ${config.size}`);
-    }
-    if (config.sauces && Array.isArray(config.sauces)) {
-      parts.push(`Salsas: ${config.sauces.join(', ')}`);
-    }
-    if (config.isCombo) {
-      parts.push('CON PAPAS');
+      metadataElements.push(
+        <span key="size" className="text-blue-400 font-black mr-2">[{config.size}]</span>
+      );
     }
 
-    return parts.length > 0 ? parts.join(' • ') : null;
+    // Half & Half Logic
+    if (config.isHalfAndHalf) {
+      metadataElements.push(
+        <div key="halves" className="text-blue-500 font-black italic mt-1 uppercase text-sm">
+          ↳ MITAD A: {config.halfA?.product?.name || config.halfAId || 'Sabor A'} <br/>
+          ↳ MITAD B: {config.halfB?.product?.name || config.halfBId || 'Sabor B'}
+        </div>
+      );
+    }
+
+    // Flavors / Variants (Wings/Snacks)
+    if (config.variants && Array.isArray(config.variants)) {
+      config.variants.forEach((v: any, idx: number) => {
+        metadataElements.push(
+          <div key={`variant-${idx}`} className="text-blue-500 font-black italic mt-0.5 uppercase text-xs">
+            ↳ SABOR: {v.name || v}
+          </div>
+        );
+      });
+    }
+
+    // Single Flavor
+    if (!config.isHalfAndHalf && config.flavor) {
+      metadataElements.push(
+        <div key="flavor" className="text-blue-500 font-black italic mt-0.5 uppercase text-xs">
+          ↳ SABOR: {config.flavor}
+        </div>
+      );
+    }
+
+    // Sauces
+    if (config.sauces && Array.isArray(config.sauces)) {
+      metadataElements.push(
+        <div key="sauces" className="text-blue-500 font-black italic mt-0.5 uppercase text-xs">
+          ↳ SALSAS: {config.sauces.join(', ')}
+        </div>
+      );
+    }
+
+    // Combo
+    if (config.isCombo) {
+      metadataElements.push(
+        <div key="combo" className="text-emerald-500 font-black italic mt-1 uppercase text-xs">
+          ↳ 🔥 CON PAPAS
+        </div>
+      );
+    }
+
+    return metadataElements;
   };
 
   return (
@@ -36,12 +78,37 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-zinc-900 border border-white/10 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-4 min-h-[300px]"
+      className="bg-zinc-900 border border-white/10 rounded-[2rem] shadow-2xl flex flex-col gap-0 min-h-[300px] overflow-hidden"
     >
+      {/* ── OMNICHANNEL BANNER ── */}
+      {order.orderType === 'TAKE_AWAY' && (
+        <div className="bg-orange-500 px-6 py-3 flex items-center gap-3">
+          <span className="text-3xl">🛍️</span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-orange-900">Para Llevar — Empacar en Caja</p>
+            <p className="text-xl font-black uppercase tracking-tighter text-white leading-tight">{order.clientName || 'Cliente'}</p>
+          </div>
+        </div>
+      )}
+      {order.orderType === 'DELIVERY' && (
+        <div className="bg-violet-600 px-6 py-3 flex items-center gap-3">
+          <span className="text-3xl">🛵</span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-violet-200">Domicilio — Empacar + Cubiertos</p>
+            <p className="text-xl font-black uppercase tracking-tighter text-white leading-tight">{order.clientName || 'Cliente'}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="p-6 flex flex-col gap-4 flex-1">
       <div className="flex justify-between items-start border-b border-white/5 pb-4">
         <div>
           <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter">
-            Mesa {order.table?.number || 'Llevar'}
+            {order.orderType === 'TAKE_AWAY' || order.orderType === 'DELIVERY'
+              ? order.clientName || 'Sin Nombre'
+              : order.table?.type === 'STOOL' 
+                ? `Banco ${order.table.number}` 
+                : `Mesa ${order.table?.number || '?'}`}
           </h3>
           <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">
             #{order.id.slice(-6)} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -59,23 +126,24 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
 
       <div className="space-y-6 flex-1 py-2">
         {order.items.map((item) => (
-          <div key={item.id} className="relative pl-4 border-l-4 border-blue-500/30">
-            <p className="text-xl font-black text-blue-400 leading-none mb-1">
+          <div key={item.id} className="relative pl-4 border-l-4 border-amber-500/30">
+            <p className="text-2xl font-black text-white leading-none mb-2 uppercase tracking-tighter">
               {item.quantity}x {item.product.name}
             </p>
             
-            {/* Variants/Metadata in Blue */}
-            {formatMetadata(item) && (
-              <p className="text-sm font-bold text-blue-500/80 italic mt-2 tracking-tight">
-                {formatMetadata(item)}
-              </p>
-            )}
-
-            {/* Special Notes in Red */}
+            {/* Detailed Metadata in Blue */}
+            <div className="space-y-0.5">
+              {renderMetadata(item)}
+            </div>
+ 
+            {/* Special Notes (THE WAITRESS SHOUT) - High Contrast Red Box */}
             {item.notes && (
-              <p className="text-sm font-black text-red-500 mt-2 uppercase tracking-tighter bg-red-500/10 px-2 py-1 rounded-lg border border-red-500/20 inline-block">
-                ⚠️ {item.notes}
-              </p>
+              <div className="mt-4 bg-red-600 p-4 rounded-2xl border-2 border-white/20 shadow-lg animate-pulse">
+                <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Nota Especial:</p>
+                <p className="text-xl font-black text-white uppercase tracking-tight leading-tight">
+                  {item.notes}
+                </p>
+              </div>
             )}
           </div>
         ))}
@@ -85,31 +153,32 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
         {order.status === 'PENDING' && (
           <button
             onClick={() => updateOrderStatus(order.id, 'PREPARING')}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase tracking-tighter rounded-2xl transition-all active:scale-95 shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2"
+            className="w-full py-5 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase tracking-tighter rounded-2xl transition-all active:scale-95 shadow-xl shadow-amber-500/20 flex items-center justify-center gap-3 text-lg"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            Comenzar Cocina
+            <span className="text-2xl">🔥</span>
+            Comenzar Preparación
           </button>
         )}
         {order.status === 'PREPARING' && (
           <button
             onClick={() => updateOrderStatus(order.id, 'READY')}
-            className="w-full py-4 bg-green-600 hover:bg-green-500 text-white font-black uppercase tracking-tighter rounded-2xl transition-all active:scale-95 shadow-lg shadow-green-600/25 flex items-center justify-center gap-2"
+            className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-tighter rounded-2xl transition-all active:scale-95 shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 text-lg"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+            <span className="text-2xl">✅</span>
             ¡Orden Lista!
           </button>
         )}
         {order.status === 'READY' && (
           <button
             onClick={() => updateOrderStatus(order.id, 'SERVED')}
-            className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-black uppercase tracking-tighter rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2"
+            className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-black uppercase tracking-tighter rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 border border-white/5"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-            Archivar Ticket
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+            Entregado / Archivar
           </button>
         )}
       </div>
+      </div>  {/* close inner p-6 div */}
     </motion.div>
   );
 };

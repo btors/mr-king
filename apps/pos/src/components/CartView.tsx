@@ -5,25 +5,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePOSStore, CartItem } from '../store/usePOSStore';
 
 export const CartView: React.FC = () => {
-  const { cart, removeFromCart, updateQuantity, calculateItemPrice, calculateTotal, clearCart, selectedTable, submitOrder, payTable, clearDrafts } = usePOSStore();
+  const { cart, removeFromCart, updateQuantity, updateNotes, calculateItemPrice, calculateTotal, clearCart, selectedTable, submitOrder, payTable, clearDrafts, isSubmitting, clientName, orderType, payChannelOrder, activeOrders } = usePOSStore();
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [showDraftWarning, setShowDraftWarning] = React.useState(false);
   
   const handlePrint = () => {
+    if (isSubmitting) return;
     alert('Imprimiendo pre-cuenta...');
   };
 
   const handleFinalize = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isSubmitting) return;
     const success = await submitOrder();
     if (success) {
-      alert('Orden enviada a cocina!');
+      // Logic handled by store (offline or sent)
     } else {
       alert('Error al enviar la orden.');
     }
   };
 
   const handleCerrarCuentaClick = () => {
+    if (isSubmitting) return;
     const draftCount = cart.filter(i => i.status === 'DRAFT').length;
     if (draftCount > 0) {
       setShowDraftWarning(true);
@@ -33,25 +35,37 @@ export const CartView: React.FC = () => {
   };
 
   const handleEnviarYCobrar = async () => {
+    if (isSubmitting) return;
     const success = await submitOrder();
     if (success) {
       setShowDraftWarning(false);
       setShowPaymentModal(true);
-    } else {
-      alert('Error al enviar productos pendientes.');
     }
   };
 
   const handleDescartarYCobrar = () => {
+    if (isSubmitting) return;
     clearDrafts();
     setShowDraftWarning(false);
     setShowPaymentModal(true);
   };
 
   const handlePayment = async () => {
-    if (!selectedTable) return;
-    const success = await payTable(selectedTable.id);
-    if (success) {
+    if (isSubmitting) return;
+    // Table-based payment
+    if (selectedTable) {
+      const success = await payTable(selectedTable.id);
+      if (success) setShowPaymentModal(false);
+      return;
+    }
+    // Channel order payment – find the matching active order
+    const activeOrder = activeOrders.find(o => o.orderType === orderType && o.clientName === clientName);
+    if (activeOrder) {
+      const success = await payChannelOrder(activeOrder.id);
+      if (success) setShowPaymentModal(false);
+    } else {
+      // No prior order – just clear and return
+      clearCart();
       setShowPaymentModal(false);
     }
   };
@@ -65,9 +79,15 @@ export const CartView: React.FC = () => {
       <header className="p-8 border-b border-white/5 space-y-4 bg-black/20">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">Tu Pedido</h2>
-          <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border ${selectedTable?.status === 'OCCUPIED' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
-            Mesa #{selectedTable?.number || '--'}
-          </span>
+          {selectedTable ? (
+            <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border ${selectedTable?.status === 'OCCUPIED' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
+              {selectedTable.type === 'STOOL' ? `Banco #${selectedTable.number}` : `Mesa #${selectedTable.number}`}
+            </span>
+          ) : clientName ? (
+            <span className="px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border bg-accent/10 text-accent border-accent/20">
+              {orderType === 'DELIVERY' ? '🛵' : '🛍️'} {clientName}
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -90,9 +110,20 @@ export const CartView: React.FC = () => {
                   item.status === 'SENT' 
                     ? 'bg-zinc-900/40 border-white/5 opacity-80 scale-[0.98]' 
                     : 'bg-white/5 border-white/5 hover:border-amber-500/20'
-                }`}
-              >
-                <div className="flex justify-between items-start">
+                  }`}
+                >
+                  {(() => {
+                    const product = usePOSStore.getState().products.find(p => p.id === item.productId);
+                    const category = usePOSStore.getState().categories.find(c => c.id === product?.categoryId);
+                    const isWaiterBar = category?.preparationPlace === 'WAITER_BAR';
+
+                    return isWaiterBar && (
+                      <div className="absolute top-4 right-4 flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-full animate-pulse">
+                        <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">⚡ Despacho Directo</span>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex justify-between items-start">
                   <div className="max-w-[200px]">
                     <h4 className={`font-black leading-tight italic uppercase tracking-tight ${item.status === 'SENT' ? 'text-zinc-500' : 'text-white'}`}>{item.name}</h4>
                     {item.status === 'SENT' && (
@@ -111,6 +142,11 @@ export const CartView: React.FC = () => {
                         🍟 Con Papas
                       </p>
                     )}
+                    {item.metadata?.variantName && !item.metadata?.isHalfAndHalf && (
+                      <p className="text-[9px] text-zinc-500 font-black uppercase mt-1 tracking-widest">
+                        🔹 {item.metadata.variantName}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className={`font-black text-lg italic ${item.status === 'SENT' ? 'text-zinc-600' : 'text-amber-500'}`}>
@@ -120,32 +156,54 @@ export const CartView: React.FC = () => {
                 </div>
 
                 {item.status === 'DRAFT' ? (
-                  <div className="flex justify-between items-center mt-2 pt-3 border-t border-white/5">
-                    <div className="flex items-center gap-3 bg-black/40 rounded-2xl p-1.5 border border-white/5">
+                  <>
+                    <div className="flex justify-between items-center mt-2 pt-3 border-t border-white/5">
+                      <div className="flex items-center gap-3 bg-black/40 rounded-2xl p-1.5 border border-white/5">
+                        <button 
+                          onClick={() => updateQuantity(item.tempId, item.quantity - 1)}
+                          disabled={isSubmitting}
+                          className="w-11 h-11 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 transition active:scale-90 disabled:opacity-50"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center font-black text-white italic">{item.quantity}</span>
+                        <button 
+                          onClick={() => updateQuantity(item.tempId, item.quantity + 1)}
+                          disabled={isSubmitting}
+                          className="w-11 h-11 flex items-center justify-center bg-amber-500 rounded-xl text-black hover:bg-amber-400 transition active:scale-90 disabled:opacity-50"
+                        >
+                          +
+                        </button>
+                      </div>
                       <button 
-                        onClick={() => updateQuantity(item.tempId, item.quantity - 1)}
-                        className="w-9 h-9 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 transition active:scale-90"
+                        onClick={() => removeFromCart(item.tempId)}
+                        disabled={isSubmitting}
+                        className="p-4 text-zinc-600 hover:text-red-500 transition hover:bg-red-500/10 rounded-xl disabled:opacity-50"
                       >
-                        -
-                      </button>
-                      <span className="w-8 text-center font-black text-white italic">{item.quantity}</span>
-                      <button 
-                        onClick={() => updateQuantity(item.tempId, item.quantity + 1)}
-                        className="w-9 h-9 flex items-center justify-center bg-amber-500 rounded-xl text-black hover:bg-amber-400 transition active:scale-90"
-                      >
-                        +
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
                     </div>
-                    <button 
-                      onClick={() => removeFromCart(item.tempId)}
-                      className="p-3 text-zinc-600 hover:text-red-500 transition hover:bg-red-500/10 rounded-xl"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  </div>
+                    <div className="mt-3">
+                      <input
+                        type="text"
+                        placeholder="Instrucciones especiales..."
+                        value={item.notes || ''}
+                        disabled={isSubmitting}
+                        onChange={(e) => updateNotes(item.tempId, e.target.value)}
+                        className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/30 transition-all font-bold italic uppercase tracking-tighter"
+                      />
+                    </div>
+                  </>
                 ) : (
-                  <div className="flex justify-end items-center mt-2 pt-3 border-t border-white/5 opacity-40">
-                    <span className="text-[10px] font-black uppercase italic text-zinc-600 tracking-widest">Pedido Confirmado</span>
+                  <div className="flex flex-col mt-2 pt-3 border-t border-white/5 space-y-2">
+                    {item.notes && (
+                      <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
+                        <p className="text-[10px] text-red-500 font-black uppercase tracking-widest">Nota: {item.notes}</p>
+                      </div>
+                    )}
+                    <div className="flex justify-end opacity-40">
+                      <span className="text-[10px] font-black uppercase italic text-zinc-600 tracking-widest">Pedido Confirmado</span>
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -175,47 +233,58 @@ export const CartView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-4 pt-2">
-          {selectedTable?.status === 'OCCUPIED' && (
+          {(selectedTable?.status === 'OCCUPIED' || (clientName && cart.some(i => i.status === 'SENT'))) && (
             <motion.button 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1.02, opacity: 1 }}
               onClick={handleCerrarCuentaClick}
-              className={`w-full py-6 rounded-[2rem] bg-emerald-600 text-white font-black text-2xl hover:bg-emerald-500 transition-all shadow-xl tracking-tighter uppercase italic flex items-center justify-center gap-3 active:scale-95 border-b-4 border-emerald-800 ${
+              disabled={isSubmitting}
+              className={`w-full py-7 rounded-[2rem] bg-emerald-600 text-white font-black text-2xl hover:bg-emerald-500 transition-all shadow-xl tracking-tighter uppercase italic flex items-center justify-center gap-3 active:scale-95 border-b-4 border-emerald-800 disabled:opacity-50 disabled:grayscale ${
                 draftCount === 0 
                   ? 'ring-4 ring-emerald-500/30 shadow-emerald-500/20' 
                   : 'opacity-90 grayscale-[0.3]'
               }`}
             >
-              <span className="text-3xl">💳</span>
-              Cerrar Cuenta
+              {isSubmitting ? (
+                <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span className="text-3xl">💳</span>
+                  Cerrar Cuenta
+                </>
+              )}
             </motion.button>
           )}
           
           <button 
             onClick={handleFinalize}
-            disabled={draftCount === 0}
-            className="w-full py-6 rounded-[2rem] bg-amber-500 text-black font-black text-2xl hover:bg-amber-400 transition-all shadow-xl shadow-amber-500/10 disabled:opacity-20 disabled:grayscale tracking-tighter uppercase italic active:scale-95 border-b-4 border-amber-700 overflow-hidden relative"
+            disabled={draftCount === 0 || isSubmitting}
+            className="w-full py-7 rounded-[2rem] bg-amber-500 text-black font-black text-2xl hover:bg-amber-400 transition-all shadow-xl shadow-amber-500/10 disabled:opacity-20 disabled:grayscale tracking-tighter uppercase italic active:scale-95 border-b-4 border-amber-700 overflow-hidden relative"
           >
-            <AnimatePresence mode="wait">
-              <motion.span
-                key={draftCount}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -20, opacity: 0 }}
-                className="block"
-              >
-                {draftCount > 0 ? `SOLICITAR ${draftCount} PEDIDO${draftCount > 1 ? 'S' : ''}` : 'ENVIAR A COCINA'}
-              </motion.span>
-            </AnimatePresence>
+            {isSubmitting ? (
+              <div className="w-8 h-8 border-4 border-black/30 border-t-black rounded-full animate-spin mx-auto" />
+            ) : (
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={draftCount}
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -20, opacity: 0 }}
+                  className="block"
+                >
+                  {draftCount > 0 ? `SOLICITAR ${draftCount} PEDIDO${draftCount > 1 ? 'S' : ''}` : 'ENVIAR A COCINA'}
+                </motion.span>
+              </AnimatePresence>
+            )}
           </button>
           
           <button 
             onClick={handlePrint}
-            disabled={cart.length === 0}
-            className="w-full py-4 rounded-2xl bg-zinc-800/50 text-zinc-500 font-bold hover:bg-zinc-800 hover:text-white transition disabled:opacity-30 flex items-center justify-center gap-3 text-xs uppercase tracking-widest border border-white/5"
+            disabled={cart.length === 0 || isSubmitting}
+            className="w-full py-5 rounded-2xl bg-zinc-800/50 text-zinc-500 font-bold hover:bg-zinc-800 hover:text-white transition disabled:opacity-30 flex items-center justify-center gap-3 text-xs uppercase tracking-widest border border-white/5"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-          Imprimir Ticket
+            Imprimir Ticket
           </button>
         </div>
       </footer>
@@ -276,7 +345,9 @@ export const CartView: React.FC = () => {
               <div className="w-24 h-24 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center text-5xl mx-auto mb-8 shadow-2xl shadow-emerald-500/10">
                 💳
               </div>
-              <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter mb-2">Cobrar Mesa #{selectedTable?.number}</h2>
+              <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter mb-2">
+                {selectedTable ? `Cobrar Mesa #${selectedTable.number}` : `Cobrar — ${clientName}`}
+              </h2>
               <p className="text-zinc-500 font-medium mb-10 text-lg">¿Confirmas la recepción del pago y el cierre de la cuenta?</p>
               
               <div className="bg-black/40 p-8 rounded-[2rem] border border-white/5 mb-10">

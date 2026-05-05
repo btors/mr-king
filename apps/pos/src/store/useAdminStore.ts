@@ -13,7 +13,7 @@ export const useAdminStore = create<AdminState>()(
       isAdminUnlocked: false,
 
       unlockAdmin: (pin: string) => {
-        if (pin === '9999') {
+        if (pin === '1234') {
           set({ isAdminUnlocked: true });
           return true;
         }

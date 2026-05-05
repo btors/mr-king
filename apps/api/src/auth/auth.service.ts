@@ -13,29 +13,9 @@ export class AuthService {
   ) {}
 
   async validateUser(username: string, pass: string): Promise<any> {
-    // 1. Check environment PINs for special roles
-    const adminPin = this.configService.get<string>('ADMIN_PIN');
-    const waiterPin = this.configService.get<string>('WAITER_PIN');
-
-    if (username === 'admin' && adminPin && pass === adminPin) {
-      const user = await this.usersService.findOneByUsername('admin');
-      if (user) {
-        const { password, ...result } = user;
-        return result;
-      }
-    }
-
-    if (username === 'waiter' && waiterPin && pass === waiterPin) {
-      const user = await this.usersService.findOneByUsername('waiter');
-      if (user) {
-        const { password, ...result } = user;
-        return result;
-      }
-    }
-
-    // 2. Standard DB validation
+    // Standard DB validation only
     const user = await this.usersService.findOneByUsername(username);
-    if (user && (await bcrypt.compare(pass, user.password))) {
+    if (user && user.isActive && (await bcrypt.compare(pass, user.password))) {
       const { password, ...result } = user;
       return result;
     }
@@ -60,8 +40,6 @@ export class AuthService {
     const waiterUser = await this.usersService.findOneByRole('WAITER');
 
     return {
-      adminPin: this.configService.get<string>('ADMIN_PIN'),
-      waiterPin: this.configService.get<string>('WAITER_PIN'),
       adminId: adminUser?.id || 'admin-id',
       waiterId: waiterUser?.id || 'waiter-id',
     };

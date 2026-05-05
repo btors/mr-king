@@ -65,8 +65,8 @@ export const MenuView: React.FC = () => {
   const handleProductClick = (product: Product) => {
     const catName = categories.find(c => c.id === product.categoryId)?.name || '';
 
-    // Pizzas → go to builder (Entry A: Solo)
-    if (product.requiresSizes && catName === 'PIZZAS') {
+    // Pizzas → go to builder
+    if (catName.toUpperCase() === 'PIZZAS') {
       setInitialPizza(product);
       setIsHalfAndHalfMode(false);
       setShowPizzaBuilder(true);
@@ -74,19 +74,25 @@ export const MenuView: React.FC = () => {
     }
 
     // Wings, Micheladas → open dedicated modal
-    if (catName === 'ALITAS' || (catName === 'BEBIDAS' && product.name.includes('Michelada'))) {
+    if (catName.toUpperCase() === 'ALITAS' || (catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada'))) {
       setSelectedProduct(product);
       return;
     }
 
     // Burgers & Hot Dogs → handled by direct buttons
-    if (catName === 'HAMBURGUESAS' || catName === 'HOT DOGS') {
+    if (catName.toUpperCase() === 'HAMBURGUESAS' || catName.toUpperCase() === 'HOT DOGS') {
       return;
     }
 
-    // Everything else → direct add
-    const basePrice = typeof product.price === 'string' ? parseFloat(product.price) : product.price as number;
-    addToCart({ productId: product.id, name: product.name, quantity: 1, unitPrice: basePrice });
+    // Everything else → direct add using first variant (usually 'Única')
+    const firstVariant = product.variants[0];
+    addToCart({ 
+      productId: product.id, 
+      name: product.name, 
+      quantity: 1, 
+      unitPrice: firstVariant?.price || 0,
+      metadata: { variantName: firstVariant?.name }
+    });
   };
 
   const handleModalConfirm = (data: { unitPrice: number; name: string; metadata?: any }) => {
@@ -114,8 +120,11 @@ export const MenuView: React.FC = () => {
       metadata: { 
         isHalfAndHalf: data.isHalfAndHalf, 
         size: data.size, 
-        halfAId: data.halfAId, 
+        variantName: data.size, // Size is the variant name for pizzas
+        halfAId: data.halfAId,
+        halfAName: productA?.name,
         halfBId: data.halfBId,
+        halfBName: productB?.name,
         halfA: productA,
         halfB: productB
       },
@@ -129,10 +138,8 @@ export const MenuView: React.FC = () => {
     return CAT_ICONS[name.toUpperCase().trim()] || '📋';
   };
 
-  const getPizzaPrice = (basePrice: number, size: 'MD' | 'GD' | 'FM') => {
-    if (size === 'GD') return basePrice + 20;
-    if (size === 'FM') return basePrice + 70;
-    return basePrice;
+  const getVariantPrice = (product: Product, name: string) => {
+    return product.variants.find(v => v.name === name)?.price || 0;
   };
 
   return (
@@ -218,7 +225,9 @@ export const MenuView: React.FC = () => {
             <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">
               {getCatIcon(activeCategoryName)} {activeCategoryName || 'Menú'}
             </h2>
-            <p className="text-zinc-500 text-sm font-medium">Mesa #{selectedTable?.number}</p>
+            <p className="text-zinc-500 text-sm font-medium">
+              {selectedTable?.type === 'STOOL' ? `Banco #${selectedTable.number}` : `Mesa #${selectedTable?.number}`}
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -278,10 +287,8 @@ export const MenuView: React.FC = () => {
               )}
 
               {filteredProducts.map((product, i) => {
-                const basePrice = typeof product.price === 'string' ? parseFloat(product.price) : product.price as number;
                 const catName = categories.find(c => c.id === product.categoryId)?.name || '';
-                const isComboCategory = catName === 'HAMBURGUESAS' || catName === 'HOT DOGS';
-                const comboExtra = catName === 'HAMBURGUESAS' ? 20 : 15;
+                const isComboCategory = catName.toUpperCase() === 'HAMBURGUESAS' || catName.toUpperCase() === 'HOT DOGS';
 
                 return (
                   <motion.div
@@ -294,57 +301,69 @@ export const MenuView: React.FC = () => {
                       ${isPizzaCategory ? 'min-h-[260px]' : ''}
                     `}
                   >
-                    {/* Main product area (clicking description opens builder for those who want to see it) */}
+                    {/* Main product area */}
                     <div className="flex-1 p-6 text-left flex flex-col gap-3">
                       {/* Name & Icon/Badge */}
                       <div className="flex items-start justify-between gap-4">
                         <h3 className="text-xl font-black text-white italic uppercase tracking-tighter leading-tight group-hover:text-amber-400 transition-colors">
                           {product.name}
                         </h3>
-                        {!isPizzaCategory && (
+                        {!isPizzaCategory && !isComboCategory && (
                           <span className="text-2xl font-black text-amber-500 italic leading-none">
-                            ${basePrice.toFixed(0)}
+                            ${(product.variants[0]?.price || 0).toFixed(0)}
                           </span>
                         )}
                       </div>
                       
                       {/* Description */}
                       {product.description && (
-                        <p className="text-zinc-500 text-[11px] font-medium leading-relaxed line-clamp-2 italic">
+                        <p className="text-zinc-400 text-xs font-medium leading-relaxed line-clamp-2 italic">
                           {product.description}
                         </p>
                       )}
 
-                      {/* PIZZA PRICE BUTTONS */}
-                      {isPizzaCategory && (
-                        <div className="mt-auto pt-4 border-t border-white/5 grid grid-cols-3 gap-2">
-                          {[
-                            { label: 'MD', size: 'MD' as const },
-                            { label: 'GD', size: 'GD' as const },
-                            { label: 'FM', size: 'FM' as const }
-                          ].map(sz => (
+                      {/* DYNAMIC VARIANT PRICE BUTTONS (For any product with > 1 variant) */}
+                      {(product.variants.length > 1) && (
+                        <div className={`mt-auto pt-4 border-t border-white/5 grid gap-2 ${product.variants.length > 3 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
+                          {product.variants.map(v => (
                             <motion.button
-                              key={sz.label}
+                              key={v.name}
                               whileHover={{ scale: 1.05, backgroundColor: 'rgba(245, 158, 11, 0.1)' }}
                               whileTap={{ scale: 0.95 }}
-                              onClick={() => handleHalfAndHalfConfirm({
-                                size: sz.size,
-                                halfAId: product.id,
-                                halfBId: product.id,
-                                price: getPizzaPrice(basePrice, sz.size),
-                                isHalfAndHalf: false
-                              })}
+                              onClick={() => {
+                                if (isPizzaCategory) {
+                                  handleHalfAndHalfConfirm({
+                                    size: v.name,
+                                    halfAId: product.id,
+                                    halfBId: product.id,
+                                    price: v.price,
+                                    isHalfAndHalf: false
+                                  });
+                                } else if (catName === 'ALITAS' || (product.flavors && product.flavors.length > 0)) {
+                                  // Open modal for flavor selection if applicable
+                                  setSelectedProduct({ ...product, price: v.price, metadata: { variantName: v.name } } as any);
+                                } else {
+                                  // Direct add for snacks/drinks with variants
+                                  addToCart({ 
+                                    productId: product.id, 
+                                    name: product.name, 
+                                    quantity: 1, 
+                                    unitPrice: v.price,
+                                    metadata: { variantName: v.name }
+                                  });
+                                }
+                              }}
                               className="text-center bg-black/40 py-2.5 rounded-xl border border-white/5 hover:border-amber-500/50 transition-all flex flex-col items-center justify-center"
                             >
-                              <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1.5">{sz.label}</p>
-                              <p className="text-xs font-black text-white italic leading-none">${getPizzaPrice(basePrice, sz.size)}</p>
+                              <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1.5">{v.name}</p>
+                              <p className="text-xs font-black text-white italic leading-none">${v.price}</p>
                             </motion.button>
                           ))}
                         </div>
                       )}
 
-                      {/* Tap hint for special products */}
-                      {(catName === 'ALITAS' || (catName === 'BEBIDAS' && product.name.includes('Michelada'))) && (
+                      {/* Tap hint for Micheladas */}
+                      {(catName === 'BEBIDAS' && product.name.includes('Michelada')) && (
                         <button
                           onClick={() => handleProductClick(product)}
                           className="mt-auto pt-2 flex items-center gap-2 text-amber-500 hover:text-amber-400 text-[10px] font-black uppercase tracking-widest transition-colors"
@@ -354,8 +373,8 @@ export const MenuView: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Normal products (Drinks/Snacks/Desserts) click area */}
-                      {!isPizzaCategory && !isComboCategory && catName !== 'ALITAS' && !(catName === 'BEBIDAS' && product.name.includes('Michelada')) && (
+                      {/* Normal products (Drinks/Snacks/Desserts) click area - Only if NO multiple variants */}
+                      {!isPizzaCategory && !isComboCategory && catName.toUpperCase() !== 'ALITAS' && !(catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada')) && product.variants.length <= 1 && (
                         <button
                           onClick={() => handleProductClick(product)}
                           className="absolute inset-0 z-0"
@@ -369,11 +388,14 @@ export const MenuView: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            const vName = 'Sola';
+                            const price = getVariantPrice(product, vName) || product.variants[0]?.price || 0;
                             addToCart({
                               productId: product.id,
                               name: product.name,
                               quantity: 1,
-                              unitPrice: basePrice,
+                              unitPrice: price,
+                              metadata: { variantName: vName }
                             });
                           }}
                           className="flex-1 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-[10px] uppercase tracking-widest transition-all border border-white/5 active:scale-95"
@@ -383,12 +405,14 @@ export const MenuView: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            const vName = 'Con Papas';
+                            const price = getVariantPrice(product, vName) || (product.variants[0]?.price + 20);
                             addToCart({
                               productId: product.id,
                               name: `${product.name} + Papas`,
                               quantity: 1,
-                              unitPrice: basePrice + comboExtra,
-                              metadata: { isCombo: true },
+                              unitPrice: price,
+                              metadata: { isCombo: true, variantName: vName },
                             });
                           }}
                           className="flex-1 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500 border-2 border-amber-500/40 hover:border-amber-500 text-amber-400 hover:text-black font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"

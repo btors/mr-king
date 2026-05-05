@@ -30,17 +30,44 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
-   * Notifies all connected clients when a new order is created.
+   * Notifies connected clients when a new order is created.
+   * - POS receives the full order.
+   * - KDS receives only items that require kitchen preparation.
    */
   notifyOrderCreated(order: any) {
-    this.server.emit('orderCreated', order);
+    // 1. Always notify POS with full data
+    this.server.to('pos').emit('orderCreated', order);
+
+    // 2. Notify KDS with filtered data
+    const kitchenItems = order.items.filter(
+      (item: any) => item.product?.category?.preparationPlace === 'KITCHEN'
+    );
+
+    if (kitchenItems.length > 0) {
+      this.server.to('kds').emit('orderCreated', {
+        ...order,
+        items: kitchenItems,
+      });
+    }
   }
 
   /**
    * Notifies all connected clients when an order status changes.
    */
   notifyOrderStatusChanged(payload: { orderId: string; status: string }) {
-    this.server.emit('orderStatusChanged', payload);
+    this.server.to('pos').to('kds').emit('orderStatusChanged', payload);
+  }
+
+  @SubscribeMessage('joinPos')
+  handleJoinPos(client: Socket) {
+    client.join('pos');
+    this.logger.log(`Client ${client.id} joined POS room`);
+  }
+
+  @SubscribeMessage('joinKds')
+  handleJoinKds(client: Socket) {
+    client.join('kds');
+    this.logger.log(`Client ${client.id} joined KDS room`);
   }
 
   @SubscribeMessage('joinTable')
