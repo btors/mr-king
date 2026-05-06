@@ -12,15 +12,24 @@ export class TablesService {
   }
 
   async create(data: { number: number; capacity?: number; type?: any }) {
-    const existing = await this.prisma.table.findUnique({ where: { number: data.number } });
+    const tableType = data.type || 'TABLE';
+    const existing = await this.prisma.table.findUnique({
+      where: {
+        number_type: {
+          number: data.number,
+          type: tableType,
+        },
+      },
+    });
     if (existing) {
-      throw new BadRequestException(`La mesa #${data.number} ya existe.`);
+      const label = tableType === 'STOOL' ? 'banco' : 'mesa';
+      throw new BadRequestException(`El ${label} #${data.number} ya existe.`);
     }
     return this.prisma.table.create({
       data: {
         number: data.number,
         capacity: data.capacity ?? 4,
-        type: data.type || 'TABLE',
+        type: tableType,
       },
     });
   }

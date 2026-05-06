@@ -52,13 +52,15 @@ model Product {
 
 model Table {
   id        String      @id @default(cuid())
-  number    Int         @unique
+  number    Int
   capacity  Int         @default(4)
   type      TableType   @default(TABLE)
   status    TableStatus @default(AVAILABLE)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   orders    Order[]
+
+  @@unique([number, type])
 }
 
 model Order {

@@ -269,7 +269,8 @@ export const usePOSStore = create<POSState>()(
           console.error('Retry offline order failed:', err);
           
           // MISSION 3: If it's a client error (4xx), remove it from the queue
-          if (err.response?.status >= 400 && err.response?.status < 500) {
+          const statusCode = err.status || err.response?.status;
+          if (statusCode >= 400 && statusCode < 500) {
             console.error('Offline order was invalid (4xx), removing from queue:', toRetry);
             set({ offlineOrders: remaining });
           }

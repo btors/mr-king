@@ -32,7 +32,10 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
-    throw new Error(`API Error ${response.status}: ${errorBody}`);
+    const error = new Error(`API Error ${response.status}: ${errorBody}`) as any;
+    error.status = response.status;
+    error.response = { status: response.status };
+    throw error;
   }
 
   // Not all responses will have JSON (e.g., 204 No Content for deletes)

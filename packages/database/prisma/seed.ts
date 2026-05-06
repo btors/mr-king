@@ -67,11 +67,11 @@ async function main() {
       },
     });
   }
-  // 5 Stools numbered 101-105 (Bancos 1 al 5)
+  // 5 Stools numbered 1-5 (Bancos 1 al 5)
   for (let i = 1; i <= 5; i++) {
     await prisma.table.create({
       data: {
-        number: 100 + i,
+        number: i,
         capacity: 1,
         type: TableType.STOOL,
       },
