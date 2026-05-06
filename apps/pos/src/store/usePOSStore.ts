@@ -64,7 +64,14 @@ export interface CartItem {
     pizzaConfig?: PizzaConfig;
     isHalfAndHalf?: boolean;
     halfAId?: string;
+    halfAName?: string;
     halfBId?: string;
+    halfBName?: string;
+    variantName?: string;
+    halfA?: Product;
+    halfB?: Product;
+    sauces?: string[];
+    variants?: any[];
   };
   notes?: string;
 }

@@ -33,6 +33,7 @@ interface KdsState {
   socket: Socket | null;
   isLoading: boolean;
   isConnected: boolean;
+  notificationAudio: HTMLAudioElement | null;
   
   // Actions
   connect: () => void;
