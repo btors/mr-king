@@ -31,4 +31,4 @@ COPY --from=builder /app/apps/kds/next.config.ts ./next.config.ts
 COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 3001
-CMD ["npm", "run", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start", "--port", "3001"]
