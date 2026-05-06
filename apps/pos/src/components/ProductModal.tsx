@@ -18,7 +18,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
   const { categories } = usePOSStore();
   const catName = categories.find(c => c.id === product.categoryId)?.name || '';
 
-  const isWings = catName.toUpperCase() === 'ALITAS';
+  const isWings = catName.toUpperCase() === 'ALITAS' || catName.toUpperCase() === 'BONELESS';
   const isMichelada = catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada');
 
   // Use pre-selected price from MenuView hack if available, else default to first variant
@@ -27,11 +27,23 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
   // Wings state
   const [selectedSauces, setSelectedSauces] = useState<string[]>([]);
   const wingFlavors = product.flavors && product.flavors.length > 0 ? product.flavors : WING_SAUCES;
-  const maxSauces = product.maxFlavors ?? 1;
+  const variantName = (product as any).metadata?.variantName;
+  const maxSauces = variantName === '6pz' ? 1 : (product.maxFlavors ?? 1);
   const limitReached = selectedSauces.length >= maxSauces;
 
   // Michelada state
-  const [micFlavor, setMicFlavor] = useState(MIC_FLAVORS[0]);
+  const [micFlavor, setMicFlavor] = useState('');
+
+  useEffect(() => {
+    if (isMichelada) {
+      setMicFlavor(product.variants[0]?.name || '');
+    }
+  }, [product, isMichelada]);
+
+  const selectedVariant = isMichelada 
+    ? product.variants.find(v => v.name === micFlavor) 
+    : null;
+  const finalPrice = selectedVariant ? selectedVariant.price : basePrice;
 
   const toggleSauce = (sauce: string) => {
     if (selectedSauces.includes(sauce)) {
@@ -55,10 +67,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
       metadata = { ...((product as any).metadata || {}), sauces: selectedSauces };
     } else if (isMichelada) {
       name = `${product.name} ${micFlavor}`;
-      metadata = { ...((product as any).metadata || {}), flavor: micFlavor };
+      metadata = { 
+        ...((product as any).metadata || {}), 
+        flavor: micFlavor,
+        variantName: micFlavor 
+      };
     }
 
-    onConfirm({ unitPrice: basePrice, name, metadata });
+    onConfirm({ unitPrice: finalPrice, name, metadata });
   };
 
   return (
@@ -194,18 +210,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
                 Selecciona el Sabor
               </h3>
               <div className="grid grid-cols-2 gap-3">
-                {MIC_FLAVORS.map(flavor => (
+                {product.variants.map(v => (
                   <button
-                    key={flavor}
-                    onClick={() => setMicFlavor(flavor)}
+                    key={v.name}
+                    onClick={() => setMicFlavor(v.name)}
                     className={`
-                      p-4 rounded-2xl border-2 font-bold text-sm text-left transition-all
-                      ${micFlavor === flavor
+                      p-4 rounded-2xl border-2 font-bold text-sm text-left transition-all flex flex-col justify-between gap-1
+                      ${micFlavor === v.name
                         ? 'border-amber-500 bg-amber-500/15 text-amber-400'
                         : 'border-white/8 bg-white/5 text-white hover:border-amber-500/40'}
                     `}
                   >
-                    {flavor}
+                    <span className="font-black uppercase tracking-tight text-xs">{v.name}</span>
+                    <span className="text-amber-500/85 text-[10px] font-black">${v.price.toFixed(0)}</span>
                   </button>
                 ))}
               </div>
@@ -232,7 +249,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
                 : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'}
             `}
           >
-            {isValid ? `Agregar · $${basePrice.toFixed(0)}` : 'Elige una salsa'}
+            {isValid ? `Agregar · $${(isMichelada ? finalPrice : basePrice).toFixed(0)}` : 'Elige una salsa'}
           </motion.button>
         </div>
       </motion.div>

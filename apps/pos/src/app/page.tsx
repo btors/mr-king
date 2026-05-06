@@ -22,6 +22,16 @@ export default function POSPage() {
   const [isAdminMenuOpen, setIsAdminMenuOpen] = React.useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('mr-king-force-logout') === 'true') {
+      localStorage.removeItem('mr-king-force-logout');
+      localStorage.removeItem('mr-king-pos-storage');
+      localStorage.removeItem('mr-king-token');
+      usePOSStore.setState({ user: null, selectedTable: null, cart: [], currentShift: null });
+      window.location.reload();
+    }
+  }, []);
+
+  useEffect(() => {
     if (!user) return; // Only fetch if logged in to save resources and comply with auth if present
     
     checkCurrentShift(); // Check if shift is open

@@ -25,11 +25,14 @@ export class PricingService {
       halfA?: { productId?: string; price?: number; variantName?: string };
       halfB?: { productId?: string; price?: number; variantName?: string };
       isCombo?: boolean;
+      sauces?: any[];
+      flavor?: string;
     }
   }): Promise<number> {
     console.log('Procesando Item:', JSON.stringify(item, null, 2));
     let unitPrice = Number(item.price || 0); // initial fallback
-    const mainVariantName = item.variantName || item.config?.variantName;
+    const config = item.config || {};
+    const mainVariantName = item.variantName || config.variantName;
     
     // Fetch product to retrieve operational flags and category fallback
     let productDetails: any = null;
@@ -51,20 +54,55 @@ export class PricingService {
       if (!Array.isArray(productDetails.variants) || productDetails.variants.length === 0) {
         throw new BadRequestException(`El producto '${productDetails.name}' no tiene variantes configuradas.`);
       }
-      const variant = productDetails.variants.find((v: any) => v.name === vName);
+
+      // Michelada flavor-to-variant price resolution
+      let resolvedVariantName = vName;
+      if (productDetails.name.toLowerCase().includes('michelada') && vName.toLowerCase() === 'única') {
+        const rawVariants = config.variants || config.sauces || (config.flavor ? [config.flavor] : []);
+        const flavorsSent = Array.isArray(rawVariants) 
+          ? rawVariants 
+          : typeof rawVariants === 'string' 
+            ? [rawVariants] 
+            : [];
+        if (flavorsSent.length > 0 && typeof flavorsSent[0] === 'string') {
+          const flavorVariant = productDetails.variants.find((v: any) => v.name.toLowerCase() === flavorsSent[0].toLowerCase());
+          if (flavorVariant) {
+            resolvedVariantName = flavorVariant.name;
+          }
+        }
+      }
+
+      const variant = productDetails.variants.find((v: any) => v.name.toLowerCase() === resolvedVariantName.toLowerCase());
       if (!variant) {
-        throw new BadRequestException(`Variante de producto no válida: '${vName}' para '${productDetails.name}'`);
+        throw new BadRequestException(`Variante de producto no válida: '${resolvedVariantName}' para '${productDetails.name}'`);
       }
       unitPrice = Number(variant.price);
       
       // Flavor validation
       if (Array.isArray(productDetails.flavors) && productDetails.flavors.length > 0) {
-        const flavorsSent = item.config?.variants || [];
+        const rawVariants = config.variants || config.sauces || (config.flavor ? [config.flavor] : []);
+        const flavorsSent = Array.isArray(rawVariants) 
+          ? rawVariants 
+          : typeof rawVariants === 'string' 
+            ? [rawVariants] 
+            : [];
+
         if (flavorsSent.length === 0) {
-          throw new BadRequestException(`El producto '${productDetails.name}' requiere al menos un sabor.`);
+          throw new BadRequestException(`El producto '${productDetails.name}' requiere al menos un sabor/salsa.`);
         }
         if (productDetails.maxFlavors > 0 && flavorsSent.length > productDetails.maxFlavors) {
           throw new BadRequestException(`El número de sabores (${flavorsSent.length}) supera el límite permitido (${productDetails.maxFlavors})`);
+        }
+
+        // Validate each flavor is allowed in case-insensitive match
+        const allowedFlavorsLower = productDetails.flavors.map((f: string) => f.toLowerCase());
+        for (const flavorSent of flavorsSent) {
+          if (typeof flavorSent !== 'string') {
+            throw new BadRequestException(`Formato de sabor no válido para '${productDetails.name}'`);
+          }
+          if (!allowedFlavorsLower.includes(flavorSent.toLowerCase())) {
+            throw new BadRequestException(`El sabor '${flavorSent}' no es válido para '${productDetails.name}'. Sabores permitidos: ${productDetails.flavors.join(', ')}`);
+          }
         }
       }
     }
@@ -73,28 +111,28 @@ export class PricingService {
     const finalCategoryName = item.categoryName || productDetails?.category?.name || '';
 
     // 1. Handle Half-and-Half Pizza Rule with Database strictness
-    if (item.config?.isHalfAndHalf) {
-      let priceA = Number(item.config?.halfA?.price || 0);
-      let priceB = Number(item.config?.halfB?.price || 0);
+    if (config.isHalfAndHalf) {
+      let priceA = Number(config.halfA?.price || 0);
+      let priceB = Number(config.halfB?.price || 0);
 
       // Trust Database over Frontend if IDs are provided
-      if (item.config?.halfA?.productId) {
-        const prodA = await this.prisma.product.findUnique({ where: { id: item.config.halfA.productId } });
+      if (config.halfA?.productId) {
+        const prodA = await this.prisma.product.findUnique({ where: { id: config.halfA.productId } });
         if (prodA) {
-          const vNameA = item.config.halfA.variantName || mainVariantName;
+          const vNameA = config.halfA.variantName || mainVariantName;
           if (vNameA && Array.isArray(prodA.variants)) {
-            const variantA = (prodA.variants as any[]).find((v: any) => v.name === vNameA);
+            const variantA = (prodA.variants as any[]).find((v: any) => v.name.toLowerCase() === vNameA.toLowerCase());
             if (variantA && variantA.price !== undefined) priceA = Number(variantA.price);
           }
         }
       }
 
-      if (item.config?.halfB?.productId) {
-        const prodB = await this.prisma.product.findUnique({ where: { id: item.config.halfB.productId } });
+      if (config.halfB?.productId) {
+        const prodB = await this.prisma.product.findUnique({ where: { id: config.halfB.productId } });
         if (prodB) {
-          const vNameB = item.config.halfB.variantName || mainVariantName;
+          const vNameB = config.halfB.variantName || mainVariantName;
           if (vNameB && Array.isArray(prodB.variants)) {
-            const variantB = (prodB.variants as any[]).find((v: any) => v.name === vNameB);
+            const variantB = (prodB.variants as any[]).find((v: any) => v.name.toLowerCase() === vNameB.toLowerCase());
             if (variantB && variantB.price !== undefined) priceB = Number(variantB.price);
           }
         }
@@ -115,7 +153,7 @@ export class PricingService {
       unitPrice = Math.max(priceA, priceB) + surcharge;
     }
 
-    return unitPrice * item.quantity;
+    return Math.round(unitPrice * item.quantity * 100) / 100;
   }
 
   /**
@@ -139,6 +177,6 @@ export class PricingService {
     for (const item of items) {
       total += await this.calculateOrderItemPrice(item);
     }
-    return total;
+    return Math.round(total * 100) / 100;
   }
 }

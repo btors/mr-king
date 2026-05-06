@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
@@ -36,12 +36,19 @@ export class AuthService {
   }
 
   async getPins() {
-    const adminUser = await this.usersService.findOneByRole('ADMIN');
-    const waiterUser = await this.usersService.findOneByRole('WAITER');
+    try {
+      const adminUser = await this.usersService.findOneByRole('ADMIN');
+      const waiterUser = await this.usersService.findOneByRole('WAITER');
 
-    return {
-      adminId: adminUser?.id || 'admin-id',
-      waiterId: waiterUser?.id || 'waiter-id',
-    };
+      return {
+        adminId: adminUser?.id || 'admin-id',
+        waiterId: waiterUser?.id || 'waiter-id',
+      };
+    } catch (e: any) {
+      return {
+        error: e.message,
+        stack: e.stack,
+      };
+    }
   }
 }

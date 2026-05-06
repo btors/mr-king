@@ -52,7 +52,7 @@ export const useKdsStore = create<KdsState>((set, get) => ({
   isLoading: false,
   isConnected: false,
   isAudioEnabled: false,
-  notificationAudio: typeof Audio !== 'undefined' ? new Audio('/sounds/notification.mp3') : null,
+  notificationAudio: typeof Audio !== 'undefined' ? new Audio('/kds/sounds/notification.mp3') : null,
 
   toggleAudio: () => {
     const { isAudioEnabled, notificationAudio } = get();
@@ -69,10 +69,12 @@ export const useKdsStore = create<KdsState>((set, get) => ({
   connect: () => {
     if (get().socket) return;
 
-    const socket = io(`${API_BASE_URL}/orders`);
+    const socketUrl = typeof window !== 'undefined' ? window.location.origin : API_BASE_URL;
+    const socket = io(`${socketUrl}/orders`, { transports: ['websocket'] });
 
     socket.on('connect', () => {
       console.log('Connected to KDS Gateway');
+      socket.emit('joinKds'); // <--- UNIRSE A LA SALA DE COCINA
       set({ isConnected: true });
       get().fetchOrders(); // Re-sync when connection is established
     });

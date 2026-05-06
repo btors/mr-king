@@ -36,11 +36,11 @@ export const KdsBoard: React.FC = () => {
       <header className="flex justify-between items-end">
         <div>
           <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase leading-none">
-            MR-KING <span className="text-blue-500">KITCHEN</span>
+            MR-KING <span className="text-blue-500">COCINA</span>
           </h1>
           <div className="flex items-center gap-2 mt-3 ml-1">
             <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">
-              Kitchen Display System • Station 01
+              Sistema de cocina • Estación 01
             </p>
             <div className="w-px h-2 bg-white/10 mx-1" />
             <div className="flex items-center gap-1.5">
@@ -51,14 +51,14 @@ export const KdsBoard: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="flex gap-4">
           <button
             onClick={toggleAudio}
             className={`
               flex items-center gap-3 px-6 py-4 rounded-[1.5rem] border transition-all duration-300
-              ${isAudioEnabled 
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+              ${isAudioEnabled
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                 : 'bg-red-500/10 border-red-500/20 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.1)]'}
             `}
           >

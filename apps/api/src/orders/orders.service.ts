@@ -27,7 +27,7 @@ export class OrdersService {
       const lineTotal = await this.pricingService.calculateOrderItemPrice(item);
       itemsWithPrices.push({ item, lineTotal });
     }
-    const total = itemsWithPrices.reduce((acc, { lineTotal }) => acc + lineTotal, 0);
+    const total = Math.round(itemsWithPrices.reduce((acc, { lineTotal }) => acc + lineTotal, 0) * 100) / 100;
 
     // 2. Create order and update table status in transaction
     const order = await this.prisma.$transaction(async (tx) => {
@@ -54,7 +54,7 @@ export class OrdersService {
               return {
                 productId: item.productId,
                 quantity: item.quantity,
-                price: lineTotal / item.quantity,
+                price: Math.round((lineTotal / item.quantity) * 100) / 100,
                 notes: item.notes,
                 pizzaConfig: item.config || {},
                 status: isKitchen ? 'PENDING' : 'READY',

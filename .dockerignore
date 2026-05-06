@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+build
+out
+.turbo
+coverage
+*.log
+.env
+.env.*
+.git
+.github
+*.lnk
+*.bat

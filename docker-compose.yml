@@ -41,6 +41,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.pos
+      network: host
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     container_name: mrking_pos
@@ -52,6 +53,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.kds
+      network: host
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     container_name: mrking_kds

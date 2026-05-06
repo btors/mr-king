@@ -22,7 +22,7 @@ const CAT_ICONS: Record<string, string> = {
 const CATEGORY_ORDER = ['PIZZAS', 'ALITAS', 'HAMBURGUESAS', 'HOT DOGS', 'SNACKS', 'POSTRES', 'BEBIDAS'];
 
 export const MenuView: React.FC = () => {
-  const { products, categories, addToCart, selectedTable, selectTable, user } = usePOSStore();
+  const { products, categories, addToCart, selectedTable, selectTable, user, orderType, clientName } = usePOSStore();
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -73,8 +73,13 @@ export const MenuView: React.FC = () => {
       return;
     }
 
-    // Wings, Micheladas → open dedicated modal
-    if (catName.toUpperCase() === 'ALITAS' || (catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada'))) {
+    // Wings, Boneless, Flavored items, Micheladas → open dedicated modal
+    const isSpecialty = catName.toUpperCase() === 'ALITAS' || 
+                        catName.toUpperCase() === 'BONELESS' || 
+                        (product.flavors && product.flavors.length > 0) ||
+                        (catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada'));
+
+    if (isSpecialty) {
       setSelectedProduct(product);
       return;
     }
@@ -175,9 +180,11 @@ export const MenuView: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 19l-7-7 7-7" /></svg>
             </button>
 
-            {/* Back button */}
             <button
-              onClick={() => selectTable(null)}
+              onClick={() => {
+                selectTable(null);
+                usePOSStore.setState({ clientName: '', orderType: 'EAT_IN' });
+              }}
               className="mb-4 w-16 h-16 flex items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10 transition text-zinc-400 border border-white/5"
               title="Mesas"
             >
@@ -226,7 +233,11 @@ export const MenuView: React.FC = () => {
               {getCatIcon(activeCategoryName)} {activeCategoryName || 'Menú'}
             </h2>
             <p className="text-zinc-500 text-sm font-medium">
-              {selectedTable?.type === 'STOOL' ? `Banco #${selectedTable.number}` : `Mesa #${selectedTable?.number}`}
+              {selectedTable 
+                ? (selectedTable.type === 'STOOL' ? `Banco #${selectedTable.number}` : `Mesa #${selectedTable.number}`)
+                : orderType === 'TAKE_AWAY'
+                  ? `🛍️ Para Llevar: ${clientName || 'Cliente'}`
+                  : `🛵 Domicilio: ${clientName || 'Cliente'}`}
             </p>
           </div>
 
@@ -308,7 +319,7 @@ export const MenuView: React.FC = () => {
                         <h3 className="text-xl font-black text-white italic uppercase tracking-tighter leading-tight group-hover:text-amber-400 transition-colors">
                           {product.name}
                         </h3>
-                        {!isPizzaCategory && !isComboCategory && (
+                        {!isPizzaCategory && (
                           <span className="text-2xl font-black text-amber-500 italic leading-none">
                             ${(product.variants[0]?.price || 0).toFixed(0)}
                           </span>
@@ -323,7 +334,7 @@ export const MenuView: React.FC = () => {
                       )}
 
                       {/* DYNAMIC VARIANT PRICE BUTTONS (For any product with > 1 variant) */}
-                      {(product.variants.length > 1) && (
+                      {(product.variants.length > 1) && !isComboCategory && !product.name.toLowerCase().includes('michelada') && (
                         <div className={`mt-auto pt-4 border-t border-white/5 grid gap-2 ${product.variants.length > 3 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
                           {product.variants.map(v => (
                             <motion.button
@@ -339,7 +350,11 @@ export const MenuView: React.FC = () => {
                                     price: v.price,
                                     isHalfAndHalf: false
                                   });
-                                } else if (catName === 'ALITAS' || (product.flavors && product.flavors.length > 0)) {
+                                } else if (
+                                  catName.toUpperCase() === 'ALITAS' || 
+                                  catName.toUpperCase() === 'BONELESS' || 
+                                  (product.flavors && product.flavors.length > 0)
+                                ) {
                                   // Open modal for flavor selection if applicable
                                   setSelectedProduct({ ...product, price: v.price, metadata: { variantName: v.name } } as any);
                                 } else {
@@ -363,7 +378,7 @@ export const MenuView: React.FC = () => {
                       )}
 
                       {/* Tap hint for Micheladas */}
-                      {(catName === 'BEBIDAS' && product.name.includes('Michelada')) && (
+                      {(catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada')) && (
                         <button
                           onClick={() => handleProductClick(product)}
                           className="mt-auto pt-2 flex items-center gap-2 text-amber-500 hover:text-amber-400 text-[10px] font-black uppercase tracking-widest transition-colors"
@@ -373,8 +388,8 @@ export const MenuView: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Normal products (Drinks/Snacks/Desserts) click area - Only if NO multiple variants */}
-                      {!isPizzaCategory && !isComboCategory && catName.toUpperCase() !== 'ALITAS' && !(catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada')) && product.variants.length <= 1 && (
+                      {/* Normal products or Micheladas click area */}
+                      {((!isPizzaCategory && !isComboCategory && catName.toUpperCase() !== 'ALITAS' && catName.toUpperCase() !== 'BONELESS' && !(product.flavors && product.flavors.length > 0) && !(catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada')) && product.variants.length <= 1) || (catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada'))) && (
                         <button
                           onClick={() => handleProductClick(product)}
                           className="absolute inset-0 z-0"
@@ -400,25 +415,27 @@ export const MenuView: React.FC = () => {
                           }}
                           className="flex-1 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-white font-black text-[10px] uppercase tracking-widest transition-all border border-white/5 active:scale-95"
                         >
-                          Sencilla
+                          Sencilla · ${(getVariantPrice(product, 'Sola') || product.variants[0]?.price || 0).toFixed(0)}
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const vName = 'Con Papas';
-                            const price = getVariantPrice(product, vName) || (product.variants[0]?.price + 20);
-                            addToCart({
-                              productId: product.id,
-                              name: `${product.name} + Papas`,
-                              quantity: 1,
-                              unitPrice: price,
-                              metadata: { isCombo: true, variantName: vName },
-                            });
-                          }}
-                          className="flex-1 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500 border-2 border-amber-500/40 hover:border-amber-500 text-amber-400 hover:text-black font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
-                        >
-                          + Papas
-                        </button>
+                        {product.variants.some(v => v.name === 'Con Papas') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const vName = 'Con Papas';
+                              const price = getVariantPrice(product, vName) || (product.variants[0]?.price + 20);
+                              addToCart({
+                                productId: product.id,
+                                name: `${product.name} + Papas`,
+                                quantity: 1,
+                                unitPrice: price,
+                                metadata: { isCombo: true, variantName: vName },
+                              });
+                            }}
+                            className="flex-1 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500 border-2 border-amber-500/40 hover:border-amber-500 text-amber-400 hover:text-black font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
+                          >
+                            + Papas · ${(getVariantPrice(product, 'Con Papas') || (product.variants[0]?.price + 20)).toFixed(0)}
+                          </button>
+                        )}
                       </div>
                     )}
                   </motion.div>

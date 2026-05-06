@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { PrismaClient, PreparationPlace, TableType } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 const connectionString = process.env.DATABASE_URL || "postgresql://mrking_user:mrking_password@localhost:5432/mrking_db?schema=public";
 const pool = new Pool({ connectionString });
@@ -226,7 +226,7 @@ async function main() {
       name: 'Pizza Dog',
       categoryId: categories['Hot Dogs'].id,
       description: 'Salchicha, pepperoni, mayonesa, queso mozzarella',
-      variants: [{name: 'Única', price: 35}],
+      variants: [{name: 'Sola', price: 35}, {name: 'Con Papas', price: 50}],
       flavors: [],
     },
 
@@ -289,13 +289,40 @@ async function main() {
     { name: 'Sidral Mundet 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
     { name: 'Fresca 600', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
     { name: 'Jugo del Valle Vidrio', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 30}] },
-    { name: 'Michelada GD Clasica', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
-    { name: 'Michelada GD Maracuya', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
-    { name: 'Michelada GD Mango', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
-    { name: 'Michelada GD Fresa', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 80}] },
-    { name: 'Michelada GD Tamarindo', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 75}] },
-    { name: 'Michelada GD Azulito', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 75}] },
-    { name: 'Michelada CH', categoryId: categories['Bebidas'].id, variants: [{name: 'Clasica', price: 50}, {name: 'Maracuya', price: 50}, {name: 'Mango', price: 50}, {name: 'Fresa', price: 50}, {name: 'Tamarindo', price: 50}, {name: 'Azulito', price: 50}] },
+    { 
+      name: 'Michelada Grande', 
+      categoryId: categories['Bebidas'].id, 
+      variants: [
+        {name: 'Única', price: 80},
+        {name: 'Clasica', price: 80},
+        {name: 'Maracuya', price: 80},
+        {name: 'Mango', price: 80},
+        {name: 'Fresa', price: 80},
+        {name: 'Clamato', price: 80},
+        {name: 'Tradicional', price: 80},
+        {name: 'Tamarindo', price: 75},
+        {name: 'Azulito', price: 75}
+      ], 
+      flavors: ['Clasica', 'Maracuya', 'Mango', 'Fresa', 'Tamarindo', 'Azulito', 'Clamato', 'Tradicional'], 
+      maxFlavors: 1 
+    },
+    { 
+      name: 'Michelada Chica', 
+      categoryId: categories['Bebidas'].id, 
+      variants: [
+        {name: 'Única', price: 50},
+        {name: 'Clasica', price: 50},
+        {name: 'Maracuya', price: 50},
+        {name: 'Mango', price: 50},
+        {name: 'Fresa', price: 50},
+        {name: 'Clamato', price: 50},
+        {name: 'Tradicional', price: 50},
+        {name: 'Tamarindo', price: 50},
+        {name: 'Azulito', price: 50}
+      ], 
+      flavors: ['Clasica', 'Maracuya', 'Mango', 'Fresa', 'Tamarindo', 'Azulito', 'Clamato', 'Tradicional'], 
+      maxFlavors: 1 
+    },
     { name: 'Pacifico Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
     { name: 'Modelo Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },
     { name: 'Corona Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },

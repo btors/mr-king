@@ -33,6 +33,8 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
   if (!response.ok) {
     if (response.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('mr-king-token');
+      localStorage.removeItem('mr-king-pos-storage');
+      localStorage.setItem('mr-king-force-logout', 'true');
       window.location.href = '/';
     }
     const errorBody = await response.text().catch(() => '');

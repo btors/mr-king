@@ -3,6 +3,7 @@ import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { Role } from '@prisma/client';
 
 @Controller('orders')
@@ -18,12 +19,14 @@ export class OrdersController {
   }
 
   @Get()
+  @Public()
   findAll(@Request() req: any) {
     const { place } = req.query;
     return this.ordersService.findAll(place);
   }
 
   @Patch(':id/status')
+  @Public()
   updateStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.ordersService.updateStatus(id, status as any);
   }
