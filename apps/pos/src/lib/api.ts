@@ -31,6 +31,10 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
   });
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('mr-king-token');
+      window.location.href = '/';
+    }
     const errorBody = await response.text().catch(() => '');
     const error = new Error(`API Error ${response.status}: ${errorBody}`) as any;
     error.status = response.status;
