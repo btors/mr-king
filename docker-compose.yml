@@ -35,7 +35,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${DB_USER:-mrking_user}:${DB_PASSWORD:-mrking_password}@database:5432/${DB_NAME:-mrking_db}?schema=public
     command: >
-      sh -c "cd packages/database && npx prisma db push && npx prisma db seed && cd ../.. && npm run start:prod --workspace=@mr-king/api"
+      sh -c "cd packages/database && npx prisma db push --accept-data-loss && npx prisma db seed && cd ../.. && npm run start:prod --workspace=@mr-king/api"
 
   pos:
     build:
