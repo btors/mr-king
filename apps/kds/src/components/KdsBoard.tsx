@@ -15,9 +15,13 @@ export const KdsBoard: React.FC = () => {
     return () => disconnect();
   }, [connect, disconnect, fetchOrders]);
 
-  const pendingOrders = orders.filter((o) => o.status === 'PENDING');
-  const preparingOrders = orders.filter((o) => o.status === 'PREPARING');
-  const readyOrders = orders.filter((o) => o.status === 'READY');
+  // Ordenar cronológicamente (FIFO: pedidos más antiguos arriba, nuevos abajo)
+  const sortedOrders = [...orders].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  const pendingOrders = sortedOrders.filter((o) => o.status === 'PENDING');
+  const preparingOrders = sortedOrders.filter((o) => o.status === 'PREPARING');
+  const readyOrders = sortedOrders.filter((o) => o.status === 'READY');
 
   if (isLoading && orders.length === 0) {
     return (
@@ -32,7 +36,7 @@ export const KdsBoard: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-[#050505] overflow-hidden p-8 gap-8">
+    <div className="flex-1 flex flex-col h-full bg-[#050505] overflow-hidden p-8 gap-8">
       <header className="flex justify-between items-end">
         <div>
           <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase leading-none">
@@ -92,7 +96,7 @@ export const KdsBoard: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-x-auto md:overflow-hidden pb-4 custom-scrollbar select-none">
+      <main className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-x-auto pb-4 custom-scrollbar">
         {/* PENDING COLUMN */}
         <section className="flex flex-col gap-6 overflow-hidden min-w-[320px] md:min-w-0 flex-shrink-0">
           <div className="flex items-center gap-4 px-6 py-4 bg-zinc-800/20 border border-white/10 rounded-[1.5rem]">

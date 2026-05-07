@@ -33,8 +33,8 @@ body {
 }
 
 .custom-scrollbar {
-  touch-action: pan-y !important; /* Permite el scroll táctil vertical nativo */
-  -webkit-overflow-scrolling: touch !important; /* Habilita el scroll con inercia ultra-fluido en iPads */
+  touch-action: auto !important; /* Habilita gestos de scroll libre y zoom de pinza */
+  -webkit-overflow-scrolling: touch !important; /* Inercia fluida en iPads/tablets */
 }
 
 /* Subtle Grid Background for Premium Look */
