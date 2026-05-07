@@ -164,11 +164,18 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
       </div>
 
       <div className="space-y-6 flex-1 py-2">
-        {order.items.map((item) => (
-          <div key={item.id} className="relative pl-4 border-l-4 border-amber-500/30">
-            <p className="text-2xl font-black text-white leading-none mb-2 uppercase tracking-tighter">
-              {item.quantity}x {item.product.name}
-            </p>
+        {order.items.map((item) => {
+          const isExtra = new Date((item as any).createdAt).getTime() - new Date(order.createdAt).getTime() > 15000;
+          return (
+            <div key={item.id} className="relative pl-4 border-l-4 border-amber-500/30">
+              <p className="text-2xl font-black text-white leading-none mb-2 uppercase tracking-tighter flex items-center gap-2 flex-wrap">
+                <span>{item.quantity}x {item.product.name}</span>
+                {isExtra && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-xl bg-orange-500 text-black text-[10px] font-black tracking-widest uppercase animate-pulse align-middle">
+                    ⚡ EXTRA
+                  </span>
+                )}
+              </p>
             
             {/* Detailed Metadata in Blue */}
             <div className="space-y-0.5">
@@ -185,7 +192,8 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
               </div>
             )}
           </div>
-        ))}
+        );
+      })}
       </div>
 
       <div className="grid grid-cols-1 gap-3 pt-4">

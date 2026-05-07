@@ -94,10 +94,20 @@ export const useKdsStore = create<KdsState>((set, get) => ({
       
       // Play notification sound
       if (get().isAudioEnabled && get().notificationAudio) {
-        get().notificationAudio?.play().catch(e => console.log('Audio play blocked:', e));
+        get().notificationAudio?.play().catch((e: any) => console.log('Audio play blocked:', e));
       }
 
-      set((state) => ({ orders: [newOrder, ...state.orders] }));
+      set((state) => {
+        const exists = state.orders.some(o => o.id === newOrder.id);
+        if (exists) {
+          // Reemplazar la tarjeta vieja con la actualizada que incluye los extras
+          return {
+            orders: state.orders.map(o => o.id === newOrder.id ? newOrder : o)
+          };
+        }
+        // Insertar comanda nueva al principio
+        return { orders: [newOrder, ...state.orders] };
+      });
     });
 
     socket.on('orderStatusChanged', ({ orderId, status }: { orderId: string, status: OrderStatus }) => {

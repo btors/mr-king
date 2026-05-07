@@ -126,12 +126,18 @@ export class OrdersService {
           include: { category: true },
         });
 
+        // Transición inteligente de estados de cocina
+        let nextStatus = activeOrder.status;
+        if (activeOrder.status === 'READY') {
+          nextStatus = 'PREPARING'; // Regresa a cocinando porque hay un extra nuevo
+        }
+
         // Update existing order total
         const updatedOrder = await tx.order.update({
           where: { id: activeOrder.id },
           data: {
             total: { increment: total },
-            status: 'PENDING' // Reiniciar estado para alertar a la cocina
+            status: nextStatus // Aplica el estado inteligente
           }
         });
 
