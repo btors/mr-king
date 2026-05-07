@@ -241,6 +241,9 @@ export class OrdersService {
     this.ordersGateway.notifyOrderStatusChanged({
       orderId: order.id,
       status: order.status,
+      waiterId: order.waiterId,
+      tableId: order.tableId,
+      tableNumber: order.table?.number,
     });
 
     return order;

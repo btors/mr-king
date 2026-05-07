@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { api } from '../lib/api';
+import { api, API_BASE_URL } from '../lib/api';
+import { io } from 'socket.io-client';
 
 export type Role = 'ADMIN' | 'WAITER' | 'KITCHEN';
 
@@ -132,6 +133,17 @@ interface POSState {
   closeShift: (actualBalance: number) => Promise<boolean>;
   addExpense: (amount: number, description: string) => Promise<boolean>;
   clearOfflineOrders: () => void;
+  
+  // Real-time notifications
+  readyTables: string[];
+  addReadyTable: (tableId: string) => void;
+  removeReadyTable: (tableId: string) => void;
+  socket: any | null;
+  connectSocket: () => void;
+  activeToast: string | null;
+  setActiveToast: (msg: string | null) => void;
+  notificationAudio: any;
+  unlockAudio: () => void;
 }
 
 export const usePOSStore = create<POSState>()(
@@ -151,6 +163,90 @@ export const usePOSStore = create<POSState>()(
       orderType: 'EAT_IN',
       clientName: '',
       activeOrders: [],
+      readyTables: [],
+      socket: null,
+      activeToast: null,
+      notificationAudio: typeof Audio !== 'undefined' ? new Audio('/sounds/bell.mp3') : null,
+
+      unlockAudio: () => {
+        const unlock = () => {
+          const audio = get().notificationAudio;
+          if (audio) {
+            audio.play().then(() => {
+              audio.pause();
+              audio.currentTime = 0;
+            }).catch(() => {});
+            if (typeof window !== 'undefined') {
+              window.removeEventListener('click', unlock);
+              window.removeEventListener('touchstart', unlock);
+            }
+          }
+        };
+        if (typeof window !== 'undefined') {
+          window.addEventListener('click', unlock);
+          window.addEventListener('touchstart', unlock);
+        }
+      },
+
+      addReadyTable: (tableId) => set((state) => {
+        if (state.readyTables.includes(tableId)) return state;
+        return { readyTables: [...state.readyTables, tableId] };
+      }),
+
+      removeReadyTable: (tableId) => set((state) => ({
+        readyTables: state.readyTables.filter(id => id !== tableId)
+      })),
+
+      setActiveToast: (msg) => {
+        set({ activeToast: msg });
+        if (msg) {
+          setTimeout(() => {
+            if (get().activeToast === msg) {
+              set({ activeToast: null });
+            }
+          }, 4000);
+        }
+      },
+
+      connectSocket: () => {
+        if (get().socket) return;
+
+        const socketUrl = typeof window !== 'undefined' ? window.location.origin : API_BASE_URL;
+        // Point to the /orders namespace exactly as KDS does
+        const socket = io(`${socketUrl}/orders`, { transports: ['websocket'] });
+
+        // Auto-register touch unlock on connect if not already done
+        get().unlockAudio();
+
+        socket.on('connect', () => {
+          console.log('Connected to POS Real-time Gateway');
+          socket.emit('joinPos');
+        });
+
+        socket.on('orderStatusChanged', (payload: any) => {
+          console.log('Order status changed event received:', payload);
+          if (payload.status === 'READY') {
+            if (payload.tableId) {
+              get().addReadyTable(payload.tableId);
+            }
+
+            // Auditivo y Alerta Personalizada (Solo dueño de la comanda)
+            const activeUser = get().user;
+            if (activeUser && payload.waiterId === activeUser.id) {
+              // Reproduce sonido de campana de hotel desbloqueado
+              const audio = get().notificationAudio;
+              if (audio) {
+                audio.play().catch((e: any) => console.log('Audio playback blocked:', e));
+              }
+              // Muestra notificación flotante (Toast)
+              const tableNumText = payload.tableNumber ? `Mesa #${payload.tableNumber}` : 'Mesa';
+              get().setActiveToast(`🛎️ ¡Los platos de la ${tableNumText} están listos para servir!`);
+            }
+          }
+        });
+
+        set({ socket });
+      },
 
       login: async (pin: string) => {
         try {
@@ -209,6 +305,9 @@ export const usePOSStore = create<POSState>()(
 
       selectTable: (table) => {
         set({ cart: [], selectedTable: table });
+        if (table) {
+          get().removeReadyTable(table.id);
+        }
         if (table?.status === 'OCCUPIED') {
           get().loadTableBill(table.id);
         }

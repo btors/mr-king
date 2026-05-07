@@ -198,7 +198,7 @@ const ChannelView: React.FC<ChannelViewProps> = ({ orderType, channelLabel }) =>
 
 // ── Main TableView ────────────────────────────────────────────────────────────
 export const TableView: React.FC = () => {
-  const { selectTable, selectedTable, user, tables, fetchTables, logout, orderType, startChannelOrder } = usePOSStore();
+  const { selectTable, selectedTable, user, tables, fetchTables, logout, orderType, startChannelOrder, readyTables } = usePOSStore();
   const [activeTab, setActiveTab] = useState<OrderType>('EAT_IN');
   const [salonSubTab, setSalonSubTab] = useState<'TABLES' | 'BAR'>('TABLES');
 
@@ -312,6 +312,11 @@ export const TableView: React.FC = () => {
                               <span className="text-[9px] font-black font-mono text-amber-500">ACTIVA</span>
                             </div>
                           )}
+                          {readyTables.includes(table.id) && (
+                            <div className="absolute top-4 right-24 flex items-center justify-center bg-red-500 text-white rounded-full w-9 h-9 animate-bounce shadow-lg border border-white z-20">
+                              <span className="text-sm">🛎️</span>
+                            </div>
+                          )}
                         </motion.button>
                       ))
                     )}
@@ -348,6 +353,11 @@ export const TableView: React.FC = () => {
                           {table.status === 'OCCUPIED' && (
                             <div className="absolute -top-2 -right-2 w-10 h-10 bg-white rounded-full border-[6px] border-amber-400 flex items-center justify-center shadow-lg">
                               <span className="w-3 h-3 bg-red-500 rounded-full animate-ping" />
+                            </div>
+                          )}
+                          {readyTables.includes(table.id) && (
+                            <div className="absolute -top-4 -left-4 w-11 h-11 bg-red-500 rounded-full flex items-center justify-center animate-bounce shadow-lg border-2 border-white z-20">
+                              <span className="text-lg">🛎️</span>
                             </div>
                           )}
                         </motion.button>

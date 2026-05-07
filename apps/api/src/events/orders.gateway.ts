@@ -54,7 +54,13 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /**
    * Notifies all connected clients when an order status changes.
    */
-  notifyOrderStatusChanged(payload: { orderId: string; status: string }) {
+  notifyOrderStatusChanged(payload: {
+    orderId: string;
+    status: string;
+    waiterId: string;
+    tableId: string | null;
+    tableNumber?: number;
+  }) {
     this.server.to('pos').to('kds').emit('orderStatusChanged', payload);
   }
 

@@ -17,11 +17,17 @@ import { ShiftsHistoryModal } from '@/components/ShiftsHistoryModal';
 import { Settings } from 'lucide-react';
 
 export default function POSPage() {
-  const { user, selectedTable, setCatalog, currentShift, isShiftLoading, checkCurrentShift, clientName, orderType } = usePOSStore();
+  const { user, selectedTable, setCatalog, currentShift, isShiftLoading, checkCurrentShift, clientName, orderType, connectSocket, activeToast } = usePOSStore();
   const [showExpenseModal, setShowExpenseModal] = React.useState(false);
   const [showClosureModal, setShowClosureModal] = React.useState(false);
   const [showHistoryModal, setShowHistoryModal] = React.useState(false);
   const [isAdminMenuOpen, setIsAdminMenuOpen] = React.useState(false);
+
+  useEffect(() => {
+    if (user) {
+      connectSocket();
+    }
+  }, [user, connectSocket]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('mr-king-force-logout') === 'true') {
@@ -176,6 +182,21 @@ export default function POSPage() {
         <div className="w-px h-4 bg-white/10" />
         <span className="text-[10px] font-black uppercase tracking-widest text-accent">MR-KING v1.0 Enterprise</span>
       </div>
+       {/* Real-time Toasts */}
+      <AnimatePresence>
+        {activeToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-[9999] px-6 py-4 bg-zinc-900/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-2xl shadow-[0_10px_40px_rgba(16,185,129,0.3)] text-emerald-400 font-bold flex items-center gap-3 text-sm"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>{activeToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modals */}
       <AnimatePresence>
         {showExpenseModal && <ExpenseModal onClose={() => setShowExpenseModal(false)} />}
