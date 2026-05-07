@@ -10,6 +10,12 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  const userCount = await prisma.user.count();
+  if (userCount > 0) {
+    console.log('🛡️ Base de datos ya inicializada con información. Omitiendo semilla de forma segura.');
+    return;
+  }
+
   console.log('Initiating database cleanup...');
   // Cascaded Delete
   await prisma.cashFlow.deleteMany({});
