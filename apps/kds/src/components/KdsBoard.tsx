@@ -92,9 +92,9 @@ export const KdsBoard: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-hidden">
+      <main className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-x-auto md:overflow-hidden pb-4 custom-scrollbar select-none">
         {/* PENDING COLUMN */}
-        <section className="flex flex-col gap-6 overflow-hidden">
+        <section className="flex flex-col gap-6 overflow-hidden min-w-[320px] md:min-w-0 flex-shrink-0">
           <div className="flex items-center gap-4 px-6 py-4 bg-zinc-800/20 border border-white/10 rounded-[1.5rem]">
             <div className="w-3 h-3 bg-zinc-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(113,113,122,0.5)]" />
             <h2 className="text-2xl font-black text-zinc-300 italic uppercase tracking-tighter">Pendientes</h2>
@@ -117,7 +117,7 @@ export const KdsBoard: React.FC = () => {
         </section>
 
         {/* PREPARING COLUMN */}
-        <section className="flex flex-col gap-6 overflow-hidden">
+        <section className="flex flex-col gap-6 overflow-hidden min-w-[320px] md:min-w-0 flex-shrink-0">
           <div className="flex items-center gap-4 px-6 py-4 bg-amber-500/10 border border-amber-500/20 rounded-[1.5rem]">
             <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.5)]" />
             <h2 className="text-2xl font-black text-amber-500 italic uppercase tracking-tighter">Preparando</h2>
@@ -140,7 +140,7 @@ export const KdsBoard: React.FC = () => {
         </section>
 
         {/* READY COLUMN */}
-        <section className="flex flex-col gap-6 overflow-hidden">
+        <section className="flex flex-col gap-6 overflow-hidden min-w-[320px] md:min-w-0 flex-shrink-0">
           <div className="flex items-center gap-4 px-6 py-4 bg-emerald-500/10 border border-emerald-500/20 rounded-[1.5rem]">
             <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_12px_rgba(16,185,129,0.5)]" />
             <h2 className="text-2xl font-black text-emerald-500 italic uppercase tracking-tighter">Listos</h2>

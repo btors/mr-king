@@ -32,6 +32,11 @@ body {
   background: rgba(59, 130, 246, 0.5);
 }
 
+.custom-scrollbar {
+  touch-action: pan-y !important; /* Permite el scroll táctil vertical nativo */
+  -webkit-overflow-scrolling: touch !important; /* Habilita el scroll con inercia ultra-fluido en iPads */
+}
+
 /* Subtle Grid Background for Premium Look */
 body::before {
   content: "";
