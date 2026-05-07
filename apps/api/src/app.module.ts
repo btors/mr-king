@@ -15,6 +15,7 @@ import { CashModule } from './cash/cash.module';
 import { TablesModule } from './tables/tables.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { PrinterModule } from './printer/printer.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     TablesModule,
     ShiftsModule,
     DashboardModule,
+    PrinterModule,
   ],
   controllers: [AppController],
   providers: [AppService],

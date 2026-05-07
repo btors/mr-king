@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Request, Param } from '@nestjs/common';
 import { ShiftsService } from './shifts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -27,5 +27,17 @@ export class ShiftsController {
   @Roles(Role.ADMIN)
   closeShift(@Body() dto: CloseShiftDto, @Request() req: any) {
     return this.shiftsService.closeShift(dto.actualBalance, req.user.sub || req.user.id);
+  }
+
+  @Get('history')
+  @Roles(Role.ADMIN)
+  getClosedShifts() {
+    return this.shiftsService.getClosedShifts();
+  }
+
+  @Get(':id')
+  @Roles(Role.ADMIN)
+  getShiftById(@Param('id') id: string) {
+    return this.shiftsService.getShiftById(id);
   }
 }

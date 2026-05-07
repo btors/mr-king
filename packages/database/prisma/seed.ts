@@ -293,34 +293,30 @@ async function main() {
       name: 'Michelada Grande', 
       categoryId: categories['Bebidas'].id, 
       variants: [
-        {name: 'Única', price: 80},
         {name: 'Clasica', price: 80},
         {name: 'Maracuya', price: 80},
         {name: 'Mango', price: 80},
         {name: 'Fresa', price: 80},
         {name: 'Clamato', price: 80},
-        {name: 'Tradicional', price: 80},
         {name: 'Tamarindo', price: 75},
         {name: 'Azulito', price: 75}
       ], 
-      flavors: ['Clasica', 'Maracuya', 'Mango', 'Fresa', 'Tamarindo', 'Azulito', 'Clamato', 'Tradicional'], 
+      flavors: ['Clasica', 'Maracuya', 'Mango', 'Fresa', 'Tamarindo', 'Azulito', 'Clamato'], 
       maxFlavors: 1 
     },
     { 
       name: 'Michelada Chica', 
       categoryId: categories['Bebidas'].id, 
       variants: [
-        {name: 'Única', price: 50},
         {name: 'Clasica', price: 50},
         {name: 'Maracuya', price: 50},
         {name: 'Mango', price: 50},
         {name: 'Fresa', price: 50},
         {name: 'Clamato', price: 50},
-        {name: 'Tradicional', price: 50},
         {name: 'Tamarindo', price: 50},
         {name: 'Azulito', price: 50}
       ], 
-      flavors: ['Clasica', 'Maracuya', 'Mango', 'Fresa', 'Tamarindo', 'Azulito', 'Clamato', 'Tradicional'], 
+      flavors: ['Clasica', 'Maracuya', 'Mango', 'Fresa', 'Tamarindo', 'Azulito', 'Clamato'], 
       maxFlavors: 1 
     },
     { name: 'Pacifico Lata/Media', categoryId: categories['Bebidas'].id, variants: [{name: 'Única', price: 35}] },

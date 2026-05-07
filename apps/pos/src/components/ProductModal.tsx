@@ -32,11 +32,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
   const limitReached = selectedSauces.length >= maxSauces;
 
   // Michelada state
-  const [micFlavor, setMicFlavor] = useState('');
+  const [micFlavor, setMicFlavor] = useState(() => {
+    const isMic = catName.toUpperCase() === 'BEBIDAS' && product.name.includes('Michelada');
+    return isMic ? (product.variants[0]?.name || '') : '';
+  });
 
   useEffect(() => {
-    if (isMichelada) {
-      setMicFlavor(product.variants[0]?.name || '');
+    if (isMichelada && product.variants[0]?.name) {
+      setMicFlavor(product.variants[0].name);
     }
   }, [product, isMichelada]);
 

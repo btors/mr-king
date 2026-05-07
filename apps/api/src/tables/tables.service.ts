@@ -1,9 +1,13 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PrinterService } from '../printer/printer.service';
 
 @Injectable()
 export class TablesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly printerService: PrinterService,
+  ) {}
 
   findAll() {
     return this.prisma.table.findMany({
@@ -72,8 +76,8 @@ export class TablesService {
     };
   }
 
-  async payBill(id: string, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
+  async payBill(id: string, userId: string, paymentMethod?: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 0. Atomic Concurrency Lock: Use conditional update as test-and-set.
       // Only ONE concurrent request can win this — it atomically changes status to 'PAYING'.
       const lockResult = await tx.table.updateMany({
@@ -103,8 +107,6 @@ export class TablesService {
         throw new BadRequestException('No hay órdenes activas para cobrar en esta mesa.');
       }
 
-      const totalAmount = activeOrders.reduce((acc, order) => acc + Number(order.total), 0);
-
       // 2. We already have 'table' from step 0
 
       let finalUserId = userId;
@@ -115,18 +117,25 @@ export class TablesService {
         if (firstAdmin) finalUserId = firstAdmin.id;
       }
 
-      if (totalAmount > 0) {
-        // 3. Generate CashFlow record (INCOME) with shiftId
-        const label = table?.type === 'STOOL' ? 'Banco' : 'Mesa';
-        await tx.cashFlow.create({
-          data: {
-            amount: totalAmount,
-            type: 'INCOME',
-            description: `Cobro Cuenta ${label} #${table?.number || id}`,
-            userId: finalUserId,
-            shiftId: activeShift.id,
-          },
-        });
+      const method = (paymentMethod === 'CARD' || paymentMethod === 'TRANSFER') ? paymentMethod : 'CASH';
+      const label = table?.type === 'STOOL' ? 'Banco' : 'Mesa';
+
+      // 3. Generate individual CashFlow records per order to preserve traceability and orderId linking
+      for (const order of activeOrders) {
+        const orderAmount = Number(order.total);
+        if (orderAmount > 0) {
+          await tx.cashFlow.create({
+            data: {
+              amount: orderAmount,
+              type: 'INCOME',
+              description: `Cobro Pedido #${order.id.slice(-6).toUpperCase()} - Cuenta ${label} #${table?.number || id}`,
+              userId: finalUserId,
+              shiftId: activeShift.id,
+              orderId: order.id,
+              paymentMethod: method as any,
+            },
+          });
+        }
       }
 
       // 4. Mark all active orders for this table as PAID
@@ -139,10 +148,26 @@ export class TablesService {
       });
 
       // 5. Free the table
-      return tx.table.update({
+      const updatedTable = await tx.table.update({
         where: { id },
         data: { status: 'AVAILABLE' },
       });
+
+      return {
+        table: updatedTable,
+        orders: activeOrders,
+      };
     });
+
+    // Post-cobro: Enlazar la Impresión Automática al Cobro de la Mesa
+    if (result.orders && result.orders.length > 0) {
+      for (const order of result.orders) {
+        this.printerService.printOrderTicket(order.id).catch((err) => {
+          console.error(`Error enviando ticket de Mesa #${order.tableId} a la ticketera:`, err);
+        });
+      }
+    }
+
+    return result.table;
   }
 }

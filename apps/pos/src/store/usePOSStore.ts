@@ -117,14 +117,14 @@ interface POSState {
   submitOrder: () => Promise<boolean>;
   clearEverything: () => void;
   loadTableBill: (tableId: string) => Promise<void>;
-  payTable: (tableId: string) => Promise<boolean>;
+  payTable: (tableId: string, paymentMethod?: string) => Promise<boolean>;
   clearDrafts: () => void;
   
   // Omnichannel actions
   startChannelOrder: (orderType: OrderType, clientName: string) => void;
   fetchActiveOrders: (orderType: OrderType) => Promise<void>;
   loadOrderForEdit: (order: ActiveOrder) => void;
-  payChannelOrder: (orderId: string) => Promise<boolean>;
+  payChannelOrder: (orderId: string, paymentMethod?: string) => Promise<boolean>;
   
   // Shift Actions
   checkCurrentShift: () => Promise<void>;
@@ -436,13 +436,13 @@ export const usePOSStore = create<POSState>()(
         }
       },
 
-      payTable: async (tableId: string) => {
+      payTable: async (tableId: string, paymentMethod?: string) => {
         const { isSubmitting } = get();
         if (isSubmitting) return false;
 
         set({ isSubmitting: true });
         try {
-          await api.post(`/tables/${tableId}/pay`, {});
+          await api.post(`/tables/${tableId}/pay`, { paymentMethod });
           set({ cart: [], selectedTable: null });
           const tables = await api.get<Table[]>('/tables');
           set({ tables });
@@ -504,12 +504,12 @@ export const usePOSStore = create<POSState>()(
         });
       },
 
-      payChannelOrder: async (orderId: string) => {
+      payChannelOrder: async (orderId: string, paymentMethod?: string) => {
         const { isSubmitting } = get();
         if (isSubmitting) return false;
         set({ isSubmitting: true });
         try {
-          await api.post(`/orders/${orderId}/pay`, {});
+          await api.post(`/orders/${orderId}/pay`, { paymentMethod });
           set({ cart: [], selectedTable: null, clientName: '', orderType: 'EAT_IN' });
           return true;
         } catch (err) {

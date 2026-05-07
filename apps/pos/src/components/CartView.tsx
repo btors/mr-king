@@ -8,6 +8,7 @@ export const CartView: React.FC = () => {
   const { cart, removeFromCart, updateQuantity, updateNotes, calculateItemPrice, calculateTotal, clearCart, selectedTable, submitOrder, payTable, clearDrafts, isSubmitting, clientName, orderType, payChannelOrder, activeOrders } = usePOSStore();
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [showDraftWarning, setShowDraftWarning] = React.useState(false);
+  const [paymentMethod, setPaymentMethod] = React.useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
   
   const handlePrint = () => {
     if (isSubmitting) return;
@@ -54,14 +55,14 @@ export const CartView: React.FC = () => {
     if (isSubmitting) return;
     // Table-based payment
     if (selectedTable) {
-      const success = await payTable(selectedTable.id);
+      const success = await payTable(selectedTable.id, paymentMethod);
       if (success) setShowPaymentModal(false);
       return;
     }
     // Channel order payment – find the matching active order
     const activeOrder = activeOrders.find(o => o.orderType === orderType && o.clientName === clientName);
     if (activeOrder) {
-      const success = await payChannelOrder(activeOrder.id);
+      const success = await payChannelOrder(activeOrder.id, paymentMethod);
       if (success) setShowPaymentModal(false);
     } else {
       // No prior order – just clear and return
@@ -350,6 +351,51 @@ export const CartView: React.FC = () => {
               </h2>
               <p className="text-zinc-500 font-medium mb-10 text-lg">¿Confirmas la recepción del pago y el cierre de la cuenta?</p>
               
+              {/* Selector de Método de Pago */}
+              <div className="space-y-2 mb-8 text-left">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-2">Método de Pago</label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('CASH')}
+                    className={`p-4 rounded-2xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === 'CASH'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-lg'
+                        : 'bg-zinc-900 border-white/5 text-zinc-400 hover:border-white/10'
+                    }`}
+                  >
+                    <span className="text-xl">💵</span>
+                    <span className="text-xs font-black uppercase tracking-wider">Efectivo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('CARD')}
+                    className={`p-4 rounded-2xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === 'CARD'
+                        ? 'bg-blue-500/10 border-blue-500 text-blue-400 shadow-lg'
+                        : 'bg-zinc-900 border-white/5 text-zinc-400 hover:border-white/10'
+                    }`}
+                  >
+                    <span className="text-xl">💳</span>
+                    <span className="text-xs font-black uppercase tracking-wider">Tarjeta</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('TRANSFER')}
+                    className={`p-4 rounded-2xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === 'TRANSFER'
+                        ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-lg'
+                        : 'bg-zinc-900 border-white/5 text-zinc-400 hover:border-white/10'
+                    }`}
+                  >
+                    <span className="text-xl">🏦</span>
+                    <span className="text-xs font-black uppercase tracking-wider">Transf.</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-black/40 p-8 rounded-[2rem] border border-white/5 mb-10">
                 <p className="text-xs font-black text-zinc-500 uppercase tracking-[0.3em] mb-2">Total a Pagar</p>
                 <div className="flex items-baseline justify-center gap-2">

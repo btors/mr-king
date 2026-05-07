@@ -49,15 +49,17 @@ export class PricingService {
       // STRICT MODE: If productId is present, we IGNORE item.price from payload
       unitPrice = 0; 
 
-      // Find variant price — throw if the requested variant doesn't exist in DB
-      const vName = mainVariantName || 'Única'; // Fallback to Única if not provided
       if (!Array.isArray(productDetails.variants) || productDetails.variants.length === 0) {
         throw new BadRequestException(`El producto '${productDetails.name}' no tiene variantes configuradas.`);
       }
 
+      // Find variant price — dynamically default to first variant's name if not provided
+      const defaultVariantName = productDetails.variants[0]?.name || 'Única';
+      const vName = mainVariantName || defaultVariantName;
+
       // Michelada flavor-to-variant price resolution
       let resolvedVariantName = vName;
-      if (productDetails.name.toLowerCase().includes('michelada') && vName.toLowerCase() === 'única') {
+      if (productDetails.name.toLowerCase().includes('michelada')) {
         const rawVariants = config.variants || config.sauces || (config.flavor ? [config.flavor] : []);
         const flavorsSent = Array.isArray(rawVariants) 
           ? rawVariants 
@@ -68,6 +70,12 @@ export class PricingService {
           const flavorVariant = productDetails.variants.find((v: any) => v.name.toLowerCase() === flavorsSent[0].toLowerCase());
           if (flavorVariant) {
             resolvedVariantName = flavorVariant.name;
+          }
+        } else if (vName.toLowerCase() === 'única') {
+          // Fallback to first available variant if 'Única' is requested but doesn't exist
+          const hasUnica = productDetails.variants.some((v: any) => v.name.toLowerCase() === 'única');
+          if (!hasUnica && productDetails.variants[0]) {
+            resolvedVariantName = productDetails.variants[0].name;
           }
         }
       }

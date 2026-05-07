@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../pricing/pricing.service';
 import { OrdersGateway } from '../events/orders.gateway';
+import { PrinterService } from '../printer/printer.service';
 
 @Injectable()
 export class OrdersService {
@@ -9,6 +10,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
     private readonly ordersGateway: OrdersGateway,
+    private readonly printerService: PrinterService,
   ) {}
 
   async create(createOrderDto: any) {
@@ -103,8 +105,8 @@ export class OrdersService {
    * Pay a single order (for TAKE_AWAY / DELIVERY or tableless EAT_IN).
    * Registers a CashFlow INCOME linked to the active Shift.
    */
-  async payOrder(orderId: string, userId: string) {
-    return this.prisma.$transaction(async (tx) => {
+   async payOrder(orderId: string, userId: string, paymentMethod?: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id: orderId } });
       if (!order) throw new BadRequestException('Orden no encontrada.');
       if (order.status === 'PAID' || order.status === 'CANCELLED') {
@@ -127,6 +129,8 @@ export class OrdersService {
           ? `Cobro Pedido – ${order.clientName} (${order.orderType})`
           : `Cobro Pedido #${order.id.slice(-6)}`;
 
+        const method = (paymentMethod === 'CARD' || paymentMethod === 'TRANSFER') ? paymentMethod : 'CASH';
+
         await tx.cashFlow.create({
           data: {
             amount,
@@ -135,6 +139,7 @@ export class OrdersService {
             userId: userId,
             shiftId: activeShift.id,
             orderId: order.id,
+            paymentMethod: method as any,
           },
         });
       }
@@ -163,6 +168,13 @@ export class OrdersService {
 
       return updatedOrder;
     });
+
+    // Fire-and-forget printing to avoid blocking the payment flow
+    this.printerService.printOrderTicket(result.id).catch((err) => {
+      console.error('Error enviando a la ticketera de cocina/caja:', err);
+    });
+
+    return result;
   }
 
   async findAll(preparationPlace?: string) {

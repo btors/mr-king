@@ -34,7 +34,7 @@ export class OrdersController {
   @Post(':id/pay')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.WAITER)
-  payOrder(@Param('id') id: string, @Request() req: any) {
-    return this.ordersService.payOrder(id, req.user.sub || req.user.id);
+  payOrder(@Param('id') id: string, @Body('paymentMethod') paymentMethod: string, @Request() req: any) {
+    return this.ordersService.payOrder(id, req.user.sub || req.user.id, paymentMethod);
   }
 }

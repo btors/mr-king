@@ -37,7 +37,7 @@ export class TablesController {
   @Post(':id/pay')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.WAITER)
-  payBill(@Param('id') id: string, @Request() req: any) {
-    return this.tablesService.payBill(id, req.user.sub || req.user.id);
+  payBill(@Param('id') id: string, @Body('paymentMethod') paymentMethod: string, @Request() req: any) {
+    return this.tablesService.payBill(id, req.user.sub || req.user.id, paymentMethod);
   }
 }

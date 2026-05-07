@@ -13,12 +13,14 @@ import { ResilienceHandler } from '@/components/ResilienceHandler';
 import { ShiftOpeningView } from '@/components/ShiftOpeningView';
 import { ExpenseModal } from '@/components/ExpenseModal';
 import { CashClosureModal } from '@/components/CashClosureModal';
+import { ShiftsHistoryModal } from '@/components/ShiftsHistoryModal';
 import { Settings } from 'lucide-react';
 
 export default function POSPage() {
   const { user, selectedTable, setCatalog, currentShift, isShiftLoading, checkCurrentShift, clientName, orderType } = usePOSStore();
   const [showExpenseModal, setShowExpenseModal] = React.useState(false);
   const [showClosureModal, setShowClosureModal] = React.useState(false);
+  const [showHistoryModal, setShowHistoryModal] = React.useState(false);
   const [isAdminMenuOpen, setIsAdminMenuOpen] = React.useState(false);
 
   useEffect(() => {
@@ -110,7 +112,15 @@ export default function POSPage() {
                     className="flex items-center gap-3 px-4 py-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors text-sm font-bold uppercase tracking-widest text-left"
                   >
                     <svg className="w-5 h-5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                    Corte (Z)
+                    Corte del Día
+                  </button>
+
+                  <button
+                    onClick={() => { setShowHistoryModal(true); setIsAdminMenuOpen(false); }}
+                    className="flex items-center gap-3 px-4 py-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-colors text-sm font-bold uppercase tracking-widest text-left"
+                  >
+                    <span className="text-lg flex-none">📜</span>
+                    Historial Cortes (Z)
                   </button>
 
                   <div className="w-full h-px bg-white/5 my-1" />
@@ -170,6 +180,7 @@ export default function POSPage() {
       <AnimatePresence>
         {showExpenseModal && <ExpenseModal onClose={() => setShowExpenseModal(false)} />}
         {showClosureModal && <CashClosureModal onClose={() => setShowClosureModal(false)} />}
+        {showHistoryModal && <ShiftsHistoryModal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} />}
       </AnimatePresence>
     </main>
   );
