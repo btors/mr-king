@@ -6,7 +6,6 @@ import { Product, usePOSStore } from '../store/usePOSStore';
 
 // Approved constant lists — DB doesn't store flavor names
 const WING_SAUCES = ['Original', 'BBQ', 'Búfalo', 'Mango Habanero', 'Ajo Parmesano', 'Lemon Pepper'];
-const MIC_FLAVORS = ['Tradicional', 'Clamato', 'Azulito', 'Tamarindo', 'Mango', 'Fresa', 'Cubana'];
 
 interface ProductModalProps {
   product: Product;
@@ -25,11 +24,20 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
   const basePrice = (product as any).price || product.variants[0]?.price || 0;
 
   // Wings state
-  const [selectedSauces, setSelectedSauces] = useState<string[]>([]);
   const wingFlavors = product.flavors && product.flavors.length > 0 ? product.flavors : WING_SAUCES;
-  const variantName = (product as any).metadata?.variantName;
-  const maxSauces = variantName === '6pz' ? 1 : (product.maxFlavors ?? 1);
-  const limitReached = selectedSauces.length >= maxSauces;
+  const variantName = (product as any).metadata?.variantName || '6pz';
+  
+  const matchingVariant = product.variants?.find((v: any) => v.name.toLowerCase() === variantName.toLowerCase()) || product.variants?.[0];
+  const maxFlavors = (matchingVariant as any)?.maxFlavors || product.maxFlavors || 2;
+  const portionSize = parseInt(variantName, 10) || 6;
+
+  const [flavorPieces, setFlavorPieces] = useState<Record<string, number>>({});
+
+  const totalPiecesAssigned = Object.values(flavorPieces).reduce((sum, count) => sum + count, 0);
+  const activeFlavorsCount = Object.values(flavorPieces).filter(count => count > 0).length;
+  
+  const isSumPerfect = totalPiecesAssigned === portionSize;
+  const isFlavorsCountValid = activeFlavorsCount > 0 && activeFlavorsCount <= maxFlavors;
 
   // Michelada state
   const [micFlavor, setMicFlavor] = useState(() => {
@@ -48,26 +56,47 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
     : null;
   const finalPrice = selectedVariant ? selectedVariant.price : basePrice;
 
-  const toggleSauce = (sauce: string) => {
-    if (selectedSauces.includes(sauce)) {
-      setSelectedSauces(prev => prev.filter(s => s !== sauce));
-    } else if (!limitReached) {
-      setSelectedSauces(prev => [...prev, sauce]);
-    }
+  const handleAddPieces = (flavor: string) => {
+    const current = flavorPieces[flavor] || 0;
+    if (totalPiecesAssigned + 3 > portionSize) return;
+    if (current === 0 && activeFlavorsCount >= maxFlavors) return;
+    setFlavorPieces(prev => ({
+      ...prev,
+      [flavor]: current + 3
+    }));
+  };
+
+  const handleSubPieces = (flavor: string) => {
+    const current = flavorPieces[flavor] || 0;
+    if (current <= 0) return;
+    setFlavorPieces(prev => ({
+      ...prev,
+      [flavor]: Math.max(0, current - 3)
+    }));
   };
 
   const isValid = isWings
-    ? selectedSauces.length > 0
-    : true;
+    ? (isSumPerfect && isFlavorsCountValid)
+    : (isMichelada ? !!micFlavor : true);
 
   const handleConfirm = () => {
     let name = product.name;
     let metadata: any = {};
 
     if (isWings) {
-      const sauceLabel = selectedSauces.join(' + ');
-      name = `${product.name} (${sauceLabel})`;
-      metadata = { ...((product as any).metadata || {}), sauces: selectedSauces };
+      const activeFlavors = Object.entries(flavorPieces)
+        .filter(([_, pieces]) => pieces > 0)
+        .map(([name, pieces]) => ({ name, pieces }));
+      
+      const flavorLabels = activeFlavors.map(f => `${f.pieces} ${f.name}`).join(' + ');
+      name = `${product.name} ${variantName} (${flavorLabels})`;
+      metadata = { 
+        ...((product as any).metadata || {}), 
+        config: {
+          portionSize: variantName,
+          flavors: activeFlavors
+        }
+      };
     } else if (isMichelada) {
       name = `${product.name} ${micFlavor}`;
       metadata = { 
@@ -117,89 +146,123 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
         {/* Body */}
         <div className="p-7 space-y-6 max-h-[55vh] overflow-y-auto custom-scrollbar">
 
-          {/* ── WINGS: Sauce Selector ── */}
+          {/* ── WINGS: Interactive counters with 3-pieces increments ── */}
           {isWings && (
             <div className="space-y-4">
-              {/* Sauce limit indicator */}
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">
-                  Selecciona tu{maxSauces > 1 ? 's' : ''} salsa{maxSauces > 1 ? 's' : ''}
-                </h3>
-                <AnimatePresence mode="wait">
-                  <motion.span
-                    key={selectedSauces.length}
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className={`text-xs font-black px-3 py-1 rounded-full transition-colors ${
-                      limitReached
-                        ? 'bg-amber-500 text-black'
-                        : 'bg-white/5 text-zinc-400'
-                    }`}
-                  >
-                    {selectedSauces.length} / {maxSauces}
-                  </motion.span>
-                </AnimatePresence>
+              {/* Summary and status of assigned pieces */}
+              <div className="bg-zinc-950/60 p-4 rounded-2xl border border-white/5 flex flex-col gap-1">
+                <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-zinc-400">
+                  <span>Porción Elegida</span>
+                  <span className="text-amber-400 font-bold">{variantName}</span>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-sm font-bold text-zinc-300">Piezas Asignadas:</span>
+                  <span className={`text-base font-black ${isSumPerfect ? 'text-emerald-400' : 'text-amber-500'}`}>
+                    {totalPiecesAssigned} / {portionSize} pz
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-medium text-zinc-500">Sabores elegidos:</span>
+                  <span className={`text-xs font-black ${isFlavorsCountValid ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {activeFlavorsCount} / {maxFlavors} máx
+                  </span>
+                </div>
               </div>
 
-              {/* Sauce pills */}
-              <div className={`grid grid-cols-2 gap-3 p-2 rounded-2xl transition-all ${isWings && selectedSauces.length === 0 ? 'bg-red-500/5 ring-2 ring-red-500/20 animate-pulse' : ''}`}>
+              {/* Sabor increment/decrement lists */}
+              <div className="space-y-2.5">
                 {wingFlavors.map(sauce => {
-                  const isSelected = selectedSauces.includes(sauce);
-                  const isDisabled = !isSelected && limitReached;
+                  const pieces = flavorPieces[sauce] || 0;
+                  const canDec = pieces > 0;
+                  const canInc = (totalPiecesAssigned + 3 <= portionSize) && (pieces > 0 || activeFlavorsCount < maxFlavors);
 
                   return (
-                    <motion.button
+                    <div
                       key={sauce}
-                      whileTap={isDisabled ? {} : { scale: 0.95 }}
-                      onClick={() => toggleSauce(sauce)}
-                      disabled={isDisabled}
                       className={`
-                        relative p-4 rounded-2xl border-2 font-bold text-sm text-left transition-all select-none
-                        ${isSelected
-                          ? 'border-amber-500 bg-amber-500/15 text-amber-400'
-                          : isDisabled
-                            ? 'border-white/5 bg-white/3 text-zinc-600 opacity-40 cursor-not-allowed grayscale'
-                            : 'border-white/8 bg-white/5 text-white hover:border-amber-500/40 hover:bg-amber-500/5'}
+                        p-3.5 rounded-2xl border transition-all flex items-center justify-between
+                        ${pieces > 0
+                          ? 'border-amber-500/50 bg-amber-500/5'
+                          : 'border-white/5 bg-white/2 hover:border-white/10'}
                       `}
                     >
-                      {isSelected && (
-                        <motion.div
-                          layoutId={`check-${product.id}`}
-                          className="absolute top-3 right-3 w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
+                      <div className="flex flex-col">
+                        <span className={`text-sm ${pieces > 0 ? 'font-black text-amber-400' : 'font-medium text-zinc-300'}`}>
+                          {sauce}
+                        </span>
+                        {pieces > 0 && (
+                          <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                            {pieces} pz asignadas
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleSubPieces(sauce)}
+                          disabled={!canDec}
+                          className={`
+                            w-9 h-9 rounded-xl flex items-center justify-center font-black text-lg transition-all border
+                            ${canDec
+                              ? 'bg-zinc-800 hover:bg-zinc-700 text-white border-white/10 active:scale-95'
+                              : 'bg-zinc-900/40 text-zinc-600 border-zinc-800/40 cursor-not-allowed'}
+                          `}
                         >
-                          <svg className="w-2.5 h-2.5 text-black" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                          </svg>
-                        </motion.div>
-                      )}
-                      {sauce}
-                    </motion.button>
+                          -
+                        </button>
+                        <span className={`w-8 text-center font-black text-base ${pieces > 0 ? 'text-white' : 'text-zinc-600'}`}>
+                          {pieces}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddPieces(sauce)}
+                          disabled={!canInc}
+                          className={`
+                            w-9 h-9 rounded-xl flex items-center justify-center font-black text-lg transition-all border
+                            ${canInc
+                              ? 'bg-amber-500 hover:bg-amber-400 text-black border-amber-600/50 active:scale-95 shadow-lg shadow-amber-500/10'
+                              : 'bg-zinc-900/40 text-zinc-600 border-zinc-800/40 cursor-not-allowed'}
+                          `}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
 
-              {/* Hint when limit reached / missing flavor */}
+              {/* Real-time Business validation helper warnings */}
               <AnimatePresence>
-                {limitReached && (
+                {!isSumPerfect && (
                   <motion.p
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="text-amber-500/80 text-xs font-bold text-center"
+                    className="text-amber-500 text-xs font-black text-center uppercase tracking-widest py-1"
                   >
-                    ✓ Límite de {maxSauces} salsa{maxSauces > 1 ? 's' : ''} alcanzado
+                    ⚠️ Faltan {portionSize - totalPiecesAssigned} piezas por asignar
                   </motion.p>
                 )}
-                {isWings && selectedSauces.length === 0 && (
+                {isSumPerfect && !isFlavorsCountValid && (
                   <motion.p
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="text-red-500 text-xs font-black text-center uppercase tracking-widest"
+                    className="text-red-500 text-xs font-black text-center uppercase tracking-widest py-1"
                   >
-                    ⚠️ Debes elegir al menos una salsa
+                    ⚠️ Superas el máximo de {maxFlavors} sabores permitidos
+                  </motion.p>
+                )}
+                {isSumPerfect && isFlavorsCountValid && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="text-emerald-500 text-xs font-black text-center uppercase tracking-widest py-1"
+                  >
+                    ✓ Distribución de sabores perfecta y lista
                   </motion.p>
                 )}
               </AnimatePresence>
@@ -252,7 +315,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onConfirm, 
                 : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'}
             `}
           >
-            {isValid ? `Agregar · $${(isMichelada ? finalPrice : basePrice).toFixed(0)}` : 'Elige una salsa'}
+            {isValid ? `Agregar · $${(isMichelada ? finalPrice : basePrice).toFixed(0)}` : isWings ? 'Asignar piezas' : 'Elige una opción'}
           </motion.button>
         </div>
       </motion.div>

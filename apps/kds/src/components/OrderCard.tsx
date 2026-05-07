@@ -24,8 +24,24 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
   }, [isFlashing]);
 
   const renderMetadata = (item: any) => {
-    const config = item.pizzaConfig || {};
+    const config = item.pizzaConfig || item.config || {};
     const metadataElements: React.ReactNode[] = [];
+
+    // Soporte para porciones y desgloses de alitas / boneless
+    if (config.portionSize) {
+      metadataElements.push(
+        <span key="portion" className="text-blue-400 font-black mr-2">[{config.portionSize}]</span>
+      );
+    }
+    if (config.flavors && Array.isArray(config.flavors)) {
+      config.flavors.forEach((f: any, idx: number) => {
+        metadataElements.push(
+          <div key={`wing-flavor-${idx}`} className="text-blue-500 font-black italic mt-0.5 uppercase text-xs">
+            ↳ {f.pieces} PZ {f.name}
+          </div>
+        );
+      });
+    }
 
     // Size Rendering (Very important for Chef)
     if (config.size) {

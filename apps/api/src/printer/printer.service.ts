@@ -97,8 +97,15 @@ export class PrinterService {
     for (const item of order.items) {
       const qty = item.quantity.toString().padStart(2, ' ');
       const name = item.product?.name || 'Producto';
-      const variantSuffix = item.pizzaConfig?.variantName ? ` (${item.pizzaConfig.variantName})` : '';
-      const fullName = `${name}${variantSuffix}`;
+      let flavorSuffix = '';
+      if (Array.isArray(item.pizzaConfig?.flavors)) {
+        const desc = item.pizzaConfig.flavors.map((f: any) => `${f.pieces}${f.name}`).join(' + ');
+        const size = item.pizzaConfig.portionSize || '';
+        flavorSuffix = ` ${size} (${desc})`;
+      } else if (item.pizzaConfig?.variantName) {
+        flavorSuffix = ` (${item.pizzaConfig.variantName})`;
+      }
+      const fullName = `${name}${flavorSuffix}`;
       
       // Pad to 80mm column width (32 characters max for generic receipt printers)
       const maxNameLen = 18;
@@ -213,7 +220,11 @@ export class PrinterService {
               const halfBName = config.halfB?.product?.name || 'Mitad B';
               displayName = `1/2 ${halfAName} / 1/2 ${halfBName}`;
             }
-            if (config.size || config.variantName) {
+            if (Array.isArray(config.flavors)) {
+              const sizeLabel = config.portionSize || config.variantName || '';
+              const flavorsDesc = config.flavors.map((f: any) => `${f.pieces}${f.name}`).join(' + ');
+              displayName = `${item.product.name} ${sizeLabel} (${flavorsDesc})`;
+            } else if (config.size || config.variantName) {
               const sizeLabel = config.size || config.variantName;
               displayName += ` (${sizeLabel})`;
             } else if (config.flavor) {

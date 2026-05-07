@@ -236,7 +236,11 @@ export class ShiftsService {
             const halfBName = config.halfB?.product?.name || 'Mitad B';
             displayName = `1/2 ${halfAName} / 1/2 ${halfBName}`;
           }
-          if (config.size || config.variantName) {
+          if (Array.isArray(config.flavors)) {
+            const sizeLabel = config.portionSize || config.variantName || '';
+            const flavorsDesc = config.flavors.map((f: any) => `${f.pieces}${f.name}`).join(' + ');
+            displayName = `${item.product.name} ${sizeLabel} (${flavorsDesc})`;
+          } else if (config.size || config.variantName) {
             const sizeLabel = config.size || config.variantName;
             displayName += ` (${sizeLabel})`;
           } else if (config.flavor) {

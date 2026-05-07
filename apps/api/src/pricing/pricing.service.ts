@@ -31,7 +31,7 @@ export class PricingService {
   }): Promise<number> {
     console.log('Procesando Item:', JSON.stringify(item, null, 2));
     let unitPrice = Number(item.price || 0); // initial fallback
-    const config = item.config || {};
+    const config: any = item.config || {};
     const mainVariantName = item.variantName || config.variantName;
     
     // Fetch product to retrieve operational flags and category fallback
@@ -88,7 +88,15 @@ export class PricingService {
       
       // Flavor validation
       if (Array.isArray(productDetails.flavors) && productDetails.flavors.length > 0) {
-        const rawVariants = config.variants || config.sauces || (config.flavor ? [config.flavor] : []);
+        let rawVariants = config.variants || config.sauces || (config.flavor ? [config.flavor] : []);
+        if (Array.isArray(config.flavors)) {
+          // Extrae los nombres de los sabores del array de objetos { name, pieces }
+          rawVariants = config.flavors.map((f: any) => typeof f === 'string' ? f : f.name);
+        } else if (typeof config.flavors === 'object' && config.flavors !== null) {
+          // Por si se envía en formato de mapa de objetos
+          rawVariants = Object.keys(config.flavors);
+        }
+
         const flavorsSent = Array.isArray(rawVariants) 
           ? rawVariants 
           : typeof rawVariants === 'string' 
@@ -98,8 +106,14 @@ export class PricingService {
         if (flavorsSent.length === 0) {
           throw new BadRequestException(`El producto '${productDetails.name}' requiere al menos un sabor/salsa.`);
         }
-        if (productDetails.maxFlavors > 0 && flavorsSent.length > productDetails.maxFlavors) {
-          throw new BadRequestException(`El número de sabores (${flavorsSent.length}) supera el límite permitido (${productDetails.maxFlavors})`);
+
+        let allowedMaxFlavors = productDetails.maxFlavors || 2;
+        if (variant && (variant as any).maxFlavors !== undefined) {
+          allowedMaxFlavors = (variant as any).maxFlavors;
+        }
+
+        if (allowedMaxFlavors > 0 && flavorsSent.length > allowedMaxFlavors) {
+          throw new BadRequestException(`El número de sabores (${flavorsSent.length}) supera el límite permitido (${allowedMaxFlavors})`);
         }
 
         // Validate each flavor is allowed in case-insensitive match

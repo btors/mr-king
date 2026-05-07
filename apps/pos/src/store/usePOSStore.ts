@@ -425,6 +425,11 @@ export const usePOSStore = create<POSState>()(
                 config.variantName = item.metadata.size;
               }
               if (item.metadata.isCombo) config.isCombo = true;
+
+              // Mezclar de forma segura el config avanzado (Alitas / Boneless)
+              if ((item.metadata as any).config) {
+                Object.assign(config, (item.metadata as any).config);
+              }
               
               if (item.metadata.halfAId) {
                 config.halfA = { 
@@ -473,7 +478,7 @@ export const usePOSStore = create<POSState>()(
               quantity: item.quantity,
               price: item.unitPrice,
               notes: item.notes,
-              variantName: item.metadata?.variantName || item.metadata?.size || undefined,
+              variantName: (item.metadata as any)?.variantName || (item.metadata as any)?.size || (item.metadata as any)?.config?.portionSize || undefined,
               config
             };
           })

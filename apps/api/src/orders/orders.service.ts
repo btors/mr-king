@@ -22,6 +22,79 @@ export class OrdersService {
       throw new BadRequestException('El campo clientName es obligatorio para pedidos TAKE_AWAY y DELIVERY.');
     }
 
+    // 0. Server-side validations for Alitas & Boneless flavor desgloses
+    for (const item of items) {
+      if (!item.productId) continue;
+      
+      const product = await this.prisma.product.findUnique({
+        where: { id: item.productId },
+        include: { category: true }
+      });
+      
+      if (!product) continue;
+      
+      const catName = product.category?.name?.toUpperCase() || '';
+      if (catName === 'ALITAS' || catName === 'BONELESS') {
+        const config = item.config || {};
+        const flavors = config.flavors;
+        
+        if (!flavors) {
+          throw new BadRequestException(`El producto '${product.name}' requiere especificar un desglose de sabores.`);
+        }
+        
+        let activeFlavorsCount = 0;
+        let totalPieces = 0;
+        
+        if (Array.isArray(flavors)) {
+          for (const f of flavors) {
+            const pieces = Number(f.pieces || 0);
+            if (pieces > 0) {
+              if (pieces % 3 !== 0) {
+                throw new BadRequestException(`Las piezas de sabor '${f.name}' deben ser múltiplos de 3 (recibido: ${pieces}).`);
+              }
+              activeFlavorsCount++;
+              totalPieces += pieces;
+            }
+          }
+        } else if (typeof flavors === 'object' && flavors !== null) {
+          for (const [flavorName, val] of Object.entries(flavors)) {
+            const pieces = Number(val || 0);
+            if (pieces > 0) {
+              if (pieces % 3 !== 0) {
+                throw new BadRequestException(`Las piezas de sabor '${flavorName}' deben ser múltiplos de 3 (recibido: ${pieces}).`);
+              }
+              activeFlavorsCount++;
+              totalPieces += pieces;
+            }
+          }
+        } else {
+          throw new BadRequestException(`El formato del desglose de sabores para '${product.name}' no es válido.`);
+        }
+        
+        const variantName = item.variantName || config.variantName || '';
+        const portionSize = parseInt(variantName, 10);
+        if (isNaN(portionSize) || portionSize <= 0) {
+          throw new BadRequestException(`No se pudo determinar el tamaño de porción para '${product.name}'.`);
+        }
+        
+        if (totalPieces !== portionSize) {
+          throw new BadRequestException(`La suma de las piezas (${totalPieces}) no coincide exactamente con el tamaño de porción comprado (${portionSize}) para '${product.name}'.`);
+        }
+        
+        let allowedMaxFlavors = product.maxFlavors || 2;
+        if (Array.isArray(product.variants)) {
+          const matchedVariant = (product.variants as any[]).find((v: any) => v.name.toLowerCase() === variantName.toLowerCase());
+          if (matchedVariant && matchedVariant.maxFlavors !== undefined) {
+            allowedMaxFlavors = matchedVariant.maxFlavors;
+          }
+        }
+        
+        if (activeFlavorsCount > allowedMaxFlavors) {
+          throw new BadRequestException(`El número de sabores seleccionados (${activeFlavorsCount}) supera el límite permitido (${allowedMaxFlavors}) para la variante '${variantName}' de '${product.name}'.`);
+        }
+      }
+    }
+
     // 1. Calculate prices server-side — never trust frontend prices.
     //    calculateOrderItemPrice() returns the full line total (unitPrice × qty).
     const itemsWithPrices: Array<{ item: any; lineTotal: number }> = [];

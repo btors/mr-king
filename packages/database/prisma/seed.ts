@@ -240,14 +240,24 @@ async function main() {
     {
       name: 'Alitas',
       categoryId: categories['Alitas'].id,
-      variants: [{name: '6pz', price: 85}, {name: '12pz', price: 160}, {name: '18pz', price: 230}, {name: '24pz', price: 290}, {name: '36pz', price: 380}],
+      variants: [
+        { name: '6pz', price: 85, maxFlavors: 2 },
+        { name: '12pz', price: 160, maxFlavors: 4 },
+        { name: '18pz', price: 230, maxFlavors: 6 },
+        { name: '24pz', price: 290, maxFlavors: 6 },
+        { name: '36pz', price: 380, maxFlavors: 6 }
+      ],
       flavors: ['BBQ', 'Mango Habanero', 'Bufalo', 'Red Hot', 'Naturales', 'Mango Chiltepin'],
       maxFlavors: 2,
     },
     {
       name: 'Boneless',
       categoryId: categories['Boneless'].id,
-      variants: [{name: '6pz', price: 60}, {name: '12pz', price: 120}, {name: '18pz', price: 160}],
+      variants: [
+        { name: '6pz', price: 60, maxFlavors: 2 },
+        { name: '12pz', price: 120, maxFlavors: 4 },
+        { name: '18pz', price: 160, maxFlavors: 6 }
+      ],
       flavors: ['BBQ', 'Mango Habanero', 'Bufalo', 'Red Hot', 'Naturales', 'Mango Chiltepin'],
       maxFlavors: 2,
     },
