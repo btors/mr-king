@@ -104,7 +104,81 @@ export class OrdersService {
     }
     const total = Math.round(itemsWithPrices.reduce((acc, { lineTotal }) => acc + lineTotal, 0) * 100) / 100;
 
-    // 2. Create order and update table status in transaction
+    // 2. Check for active order to merge (only for TAKE_AWAY or DELIVERY)
+    let activeOrder: any = null;
+    if ((type === 'TAKE_AWAY' || type === 'DELIVERY') && clientName?.trim()) {
+      activeOrder = await this.prisma.order.findFirst({
+        where: {
+          clientName: { equals: clientName.trim(), mode: 'insensitive' },
+          orderType: type,
+          status: { in: ['PENDING', 'PREPARING', 'READY'] }
+        },
+        include: { items: true }
+      });
+    }
+
+    if (activeOrder) {
+      const order = await this.prisma.$transaction(async (tx) => {
+        // Fetch products to check preparation place
+        const productIds = items.map((i: any) => i.productId);
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          include: { category: true },
+        });
+
+        // Update existing order total
+        const updatedOrder = await tx.order.update({
+          where: { id: activeOrder.id },
+          data: {
+            total: { increment: total },
+            status: 'PENDING' // Reiniciar estado para alertar a la cocina
+          }
+        });
+
+        // Create new lines of products
+        await tx.orderItem.createMany({
+          data: itemsWithPrices.map(({ item, lineTotal }) => {
+            const product = products.find((p) => p.id === item.productId);
+            const isKitchen = product?.category?.preparationPlace === 'KITCHEN';
+            
+            return {
+              orderId: activeOrder.id,
+              productId: item.productId,
+              quantity: item.quantity,
+              price: Math.round((lineTotal / item.quantity) * 100) / 100,
+              notes: item.notes,
+              pizzaConfig: item.config || {},
+              status: isKitchen ? 'PENDING' : 'READY',
+            };
+          })
+        });
+
+        return updatedOrder;
+      });
+
+      // Emit real-time event of the unifed full order (Filtered for KDS)
+      const fullOrder = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: {
+          items: { 
+            include: { 
+              product: {
+                include: { category: true }
+              } 
+            } 
+          },
+          table: true,
+        },
+      });
+
+      if (fullOrder) {
+        this.ordersGateway.notifyOrderCreated(fullOrder);
+      }
+
+      return order;
+    }
+
+    // 3. Create a new order if no active order is found
     const order = await this.prisma.$transaction(async (tx) => {
       // Fetch products to check preparation place
       const productIds = items.map((i: any) => i.productId);
@@ -152,7 +226,7 @@ export class OrdersService {
       return newOrder;
     });
 
-    // 3. Emit real-time event (Filtered for KDS)
+    // Emit real-time event for newly created order (Filtered for KDS)
     const fullOrder = await this.prisma.order.findUnique({
       where: { id: order.id },
       include: {

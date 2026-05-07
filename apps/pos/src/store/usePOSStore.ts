@@ -495,6 +495,13 @@ export const usePOSStore = create<POSState>()(
           const tables = await api.get<Table[]>('/tables');
           const updatedTable = tables.find(t => t.id === selectedTable?.id);
           set({ tables, selectedTable: updatedTable || selectedTable });
+
+          // Actualizar de inmediato órdenes activas de canales y limpiar carrito
+          const currentOrderType = get().orderType;
+          if (currentOrderType !== 'EAT_IN') {
+            await get().fetchActiveOrders(currentOrderType);
+            set({ cart: [], clientName: '', orderType: 'EAT_IN' });
+          }
           return true;
         } catch (err: any) {
           // If network error (offline)
