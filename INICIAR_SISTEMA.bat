@@ -14,6 +14,8 @@ docker compose up -d
 if %errorlevel% neq 0 (
     docker-compose up -d
 )
+echo [*] Activando controlador automático de ticketera USB...
+start /min "" node print_relay.js
 
 echo.
 echo [OK] Servidores activos.

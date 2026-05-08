@@ -46,19 +46,43 @@ export class PrinterService {
           try { fs.unlinkSync(tempFile); } catch {}
         });
       } else {
-        // Linux (Docker container) connecting to Windows Host Printer Spooler
-        const printerPath = '//host.docker.internal/Caja_Printer';
-        exec(`smbclient "${printerPath}" -N -c "print ${tempFile}"`, (err) => {
-          if (err) {
-            console.log('--- SIMULANDO TICKETERA ESC/POS (80mm) ---');
-            console.log(ticketText);
-            console.log('-------------------------------------------');
-          } else {
-            console.log('Ticket enviado con éxito a la ticketera Caja_Printer mediante smbclient.');
+        const http = require('http');
+        const payload = ticketText;
+        const req = http.request({
+          hostname: process.env.PRINTER_HOST || 'host.docker.internal',
+          port: 9101,
+          path: '/print',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Length': Buffer.byteLength(payload, 'utf8')
           }
-          // Clean up temp file
-          try { fs.unlinkSync(tempFile); } catch {}
+        }, (res: any) => {
+          if (res.statusCode === 200) {
+            console.log('Ticket enviado al Relay con éxito.');
+            try { fs.unlinkSync(tempFile); } catch {}
+          } else {
+            fallbackSMB();
+          }
         });
+        req.on('error', (e: any) => {
+          console.log('Relay no disponible, usando fallback...');
+          fallbackSMB();
+        });
+        req.write(payload);
+        req.end();
+
+        function fallbackSMB() {
+          const printerPath = '//host.docker.internal/Caja_Printer';
+          exec(`smbclient "${printerPath}" -N -c "print ${tempFile}"`, (err) => {
+            if (err) {
+              console.log('--- SIMULANDO TICKETERA ESC/POS (80mm) ---');
+              console.log(ticketText);
+              console.log('-------------------------------------------');
+            }
+            try { fs.unlinkSync(tempFile); } catch {}
+          });
+        }
       }
 
       return true;
@@ -285,17 +309,43 @@ export class PrinterService {
           try { fs.unlinkSync(tempFile); } catch {}
         });
       } else {
-        const printerPath = '//host.docker.internal/Caja_Printer';
-        exec(`smbclient "${printerPath}" -N -c "print ${tempFile}"`, (err) => {
-          if (err) {
-            console.log('--- SIMULANDO TICKETERA ESC/POS DE CORTE (80mm) ---');
-            console.log(ticketText);
-            console.log('---------------------------------------------------');
-          } else {
-            console.log('Ticket de Corte enviado con éxito mediante smbclient.');
+        const http = require('http');
+        const payload = ticketText;
+        const req = http.request({
+          hostname: process.env.PRINTER_HOST || 'host.docker.internal',
+          port: 9101,
+          path: '/print',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+            'Content-Length': Buffer.byteLength(payload, 'utf8')
           }
-          try { fs.unlinkSync(tempFile); } catch {}
+        }, (res: any) => {
+          if (res.statusCode === 200) {
+            console.log('Ticket de Corte enviado al Relay con éxito.');
+            try { fs.unlinkSync(tempFile); } catch {}
+          } else {
+            fallbackSMB();
+          }
         });
+        req.on('error', (e: any) => {
+          console.log('Relay no disponible, usando fallback...');
+          fallbackSMB();
+        });
+        req.write(payload);
+        req.end();
+
+        function fallbackSMB() {
+          const printerPath = '//host.docker.internal/Caja_Printer';
+          exec(`smbclient "${printerPath}" -N -c "print ${tempFile}"`, (err) => {
+            if (err) {
+              console.log('--- SIMULANDO TICKETERA ESC/POS DE CORTE (80mm) ---');
+              console.log(ticketText);
+              console.log('---------------------------------------------------');
+            }
+            try { fs.unlinkSync(tempFile); } catch {}
+          });
+        }
       }
 
       return true;
