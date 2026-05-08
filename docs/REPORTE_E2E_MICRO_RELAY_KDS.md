@@ -25,8 +25,8 @@ Este reporte certifica que la automatización del Micro-Relay de impresión USB,
        MR-KING SNACK BAR        
    "EL REY DE LAS MERIENDAS"    
 ================================
-Ticket de Pago #D4I6T4
-Fecha: 7/5/2026   Hora: 7:01:30 p.m.
+Ticket de Pago #ZGQWDS
+Fecha: 7/5/2026   Hora: 7:38:39 p.m.
 Tipo: Llevar
 Cliente: Luis
 Mesero: ADMINISTRADOR

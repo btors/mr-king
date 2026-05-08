@@ -16,7 +16,7 @@ const prisma = new PrismaClient({ adapter });
 // Start a Mock Micro-Relay Server on Port 9101 to capture prints
 let lastCapturedPrint = '';
 const mockRelayServer = http.createServer((req: any, res: any) => {
-  if (req.url === '/print' && req.method === 'POST') {
+  if ((req.url === '/print' || req.url === '/print/') && req.method === 'POST') {
     let body = '';
     req.on('data', (chunk: any) => { body += chunk; });
     req.on('end', () => {

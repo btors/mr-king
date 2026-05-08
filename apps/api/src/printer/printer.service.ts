@@ -51,7 +51,7 @@ export class PrinterService {
         const req = http.request({
           hostname: process.env.PRINTER_HOST || 'host.docker.internal',
           port: 9101,
-          path: '/print',
+          path: '/print/',
           method: 'POST',
           headers: {
             'Content-Type': 'text/plain',
@@ -314,7 +314,7 @@ export class PrinterService {
         const req = http.request({
           hostname: process.env.PRINTER_HOST || 'host.docker.internal',
           port: 9101,
-          path: '/print',
+          path: '/print/',
           method: 'POST',
           headers: {
             'Content-Type': 'text/plain',

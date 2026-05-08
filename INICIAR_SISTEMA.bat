@@ -14,8 +14,8 @@ docker compose up -d
 if %errorlevel% neq 0 (
     docker-compose up -d
 )
-echo [*] Activando controlador automático de ticketera USB...
-start /min "" node print_relay.js
+echo [*] Activando controlador automático de ticketera USB (PowerShell)...
+start /min powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File print_relay.ps1
 
 echo.
 echo [OK] Servidores activos.
