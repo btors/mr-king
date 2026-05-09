@@ -23,6 +23,22 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     }
   }, [isFlashing]);
 
+  const [isPrinting, setIsPrinting] = React.useState(false);
+
+  const handlePrintKitchen = async () => {
+    try {
+      setIsPrinting(true);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      await fetch(`${API_BASE_URL}/orders/${order.id}/print-kitchen`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Error sending to printer:', error);
+    } finally {
+      setTimeout(() => setIsPrinting(false), 2000);
+    }
+  };
+
   const renderMetadata = (item: any) => {
     const config = item.pizzaConfig || item.config || {};
     const metadataElements: React.ReactNode[] = [];
@@ -153,13 +169,28 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
             #{order.id.slice(-6)} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
-        <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest 
-          ${order.status === 'PENDING' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 
-            order.status === 'PREPARING' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 
-            'bg-green-500/10 text-green-500 border border-green-500/20'}`}
-        >
-          {order.status === 'PENDING' ? 'Pendiente' : 
-           order.status === 'PREPARING' ? 'Cocinando' : 'Listo'}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handlePrintKitchen}
+            disabled={isPrinting}
+            title="Reimprimir en Cocina"
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 active:scale-75 shadow-lg ${
+              isPrinting 
+                ? 'bg-blue-600 text-white rotate-[360deg]' 
+                : 'bg-zinc-800 text-zinc-400 hover:bg-blue-600 hover:text-white hover:shadow-blue-500/30'
+            }`}
+          >
+            <span className={`text-xs transition-transform ${isPrinting ? 'animate-pulse' : ''}`}>🖨️</span>
+          </button>
+
+          <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest 
+            ${order.status === 'PENDING' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 
+              order.status === 'PREPARING' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 
+              'bg-green-500/10 text-green-500 border border-green-500/20'}`}
+          >
+            {order.status === 'PENDING' ? 'Pendiente' : 
+             order.status === 'PREPARING' ? 'Cocinando' : 'Listo'}
+          </div>
         </div>
       </div>
 

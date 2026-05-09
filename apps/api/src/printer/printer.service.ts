@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import * as net from 'net';
 import { PrismaService } from '../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -418,6 +419,133 @@ export class PrinterService {
     }
 
     ticket += '\n\n\n\n\n\x1b\x69'; // Cut paper ESC/POS command code at the end
+    
+    return ticket;
+  }
+
+  async printKitchenTicket(order: any): Promise<boolean> {
+    try {
+      const KITCHEN_IP = process.env.KITCHEN_PRINTER_IP || '192.168.0.201';
+      const KITCHEN_PORT = 9100;
+      
+      // 1. Formatear la comanda exclusivamente para Cocina (Sin precios, solo items y notas)
+      const ticketText = this.formatKitchenTicket(order);
+      
+      // Si no hay productos para cocina, omitir el envío de forma silenciosa
+      if (!ticketText) return true;
+      
+      // 2. Enviar vía RAW TCP Socket directamente a la IP de la ticketera
+      const client = new net.Socket();
+      
+      // Configurar timeout de 3 segundos para no bloquear el flujo en caso de desconexión
+      client.setTimeout(3000); 
+
+      client.connect(KITCHEN_PORT, KITCHEN_IP, () => {
+        client.write(ticketText, 'latin1', () => {
+          client.destroy(); // Cerrar conexión tras envío
+        });
+      });
+      
+      client.on('timeout', () => {
+        console.log('⌛ Timeout connecting to Kitchen Printer');
+        client.destroy();
+      });
+
+      client.on('error', (err) => {
+        console.error('🚨 Fallo al conectar con la impresora de Cocina:', err.message);
+      });
+      
+      return true;
+    } catch (e) {
+      console.error('Error fatal en printKitchenTicket:', e);
+      return false;
+    }
+  }
+
+  private formatKitchenTicket(order: any): string {
+    // Filtrar solo productos que requieran preparación en 'KITCHEN'
+    const kitchenItems = order.items.filter(
+      (item: any) => item.product?.category?.preparationPlace === 'KITCHEN'
+    );
+
+    if (kitchenItems.length === 0) {
+      return ''; // Retornar cadena vacía si no hay ítems de cocina
+    }
+
+    const divider = '--------------------------------\n';
+    const boldOn = '\x1b\x45\x01';
+    const boldOff = '\x1b\x45\x00';
+    const bigFont = '\x1b\x21\x30'; // Doble ancho y doble alto
+    const normalFont = '\x1b\x21\x00';
+    const center = '\x1b\x61\x01';
+    const leftAlign = '\x1b\x61\x00';
+    
+    let ticket = '\x1b\x40'; // Iniciar impresora (ESC @)
+    
+    ticket += center;
+    ticket += `${boldOn}*** NUEVA COMANDA ***${boldOff}\n`;
+    ticket += `Folio: #${order.id.slice(-6).toUpperCase()}\n`;
+    ticket += `Hora: ${new Date(order.createdAt).toLocaleTimeString('es-MX')}\n`;
+    
+    ticket += leftAlign;
+    ticket += divider;
+    ticket += bigFont + boldOn;
+    
+    if (order.table) {
+      ticket += `MESA: ${order.table.number}\n`;
+    } else if (order.clientName) {
+      const trimmedName = order.clientName.length > 16 ? order.clientName.substring(0, 15) + '.' : order.clientName;
+      ticket += `${trimmedName.toUpperCase()}\n`;
+    } else {
+      ticket += 'MOSTRADOR\n';
+    }
+    
+    ticket += normalFont + boldOff;
+    ticket += `Tipo: ${order.orderType === 'EAT_IN' ? 'COMER AQUI' : 'LLEVAR/DOMICILIO'}\n`;
+    ticket += divider;
+
+    // Desglosar ítems uno a uno para visibilidad masiva
+    for (const item of kitchenItems) {
+      const qty = `${item.quantity}x`;
+      const name = item.product?.name || 'Producto';
+      
+      let description = '';
+      
+      // Desglose inteligente de variantes, sabores y pizzaConfig
+      if (item.pizzaConfig) {
+        try {
+          const config = typeof item.pizzaConfig === 'string' 
+            ? JSON.parse(item.pizzaConfig) 
+            : item.pizzaConfig;
+            
+          if (config.isHalfAndHalf) {
+            const halfAName = config.halfA?.product?.name || 'Mitad A';
+            const halfBName = config.halfB?.product?.name || 'Mitad B';
+            description += `  1/2 ${halfAName}\n  1/2 ${halfBName}\n`;
+          }
+          
+          if (Array.isArray(config.flavors)) {
+            const fDesc = config.flavors.map((f: any) => `${f.pieces}${f.name}`).join(' + ');
+            description += `  (${fDesc})\n`;
+          } else if (config.variantName) {
+            description += `  (${config.variantName})\n`;
+          } else if (config.flavor) {
+            description += `  (${config.flavor})\n`;
+          }
+        } catch (err) {}
+      }
+
+      ticket += `${boldOn}${qty} ${name.toUpperCase()}${boldOff}\n`;
+      if (description) ticket += description;
+      
+      if (item.notes && item.notes.trim() !== '') {
+        ticket += `${boldOn}* NOTA: ${item.notes.toUpperCase()}${boldOff}\n`;
+      }
+      
+      ticket += divider;
+    }
+
+    ticket += '\n\n\n\n\x1b\x69'; // Feed y Corte de papel
     
     return ticket;
   }

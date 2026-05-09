@@ -37,4 +37,11 @@ export class OrdersController {
   payOrder(@Param('id') id: string, @Body('paymentMethod') paymentMethod: string, @Request() req: any) {
     return this.ordersService.payOrder(id, req.user.sub || req.user.id, paymentMethod);
   }
+
+  @Post(':id/print-kitchen')
+  @Public()
+  async printKitchen(@Param('id') id: string) {
+    const success = await this.ordersService.printKitchenManual(id);
+    return { success };
+  }
 }

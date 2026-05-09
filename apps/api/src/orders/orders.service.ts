@@ -179,6 +179,8 @@ export class OrdersService {
 
       if (fullOrder) {
         this.ordersGateway.notifyOrderCreated(fullOrder);
+        // Disparar comanda física a la ticketera de red en Cocina
+        this.printerService.printKitchenTicket(fullOrder);
       }
 
       return order;
@@ -249,6 +251,8 @@ export class OrdersService {
 
     if (fullOrder) {
       this.ordersGateway.notifyOrderCreated(fullOrder);
+      // Disparar comanda física a la ticketera de red en Cocina
+      this.printerService.printKitchenTicket(fullOrder);
     }
 
     return order;
@@ -400,5 +404,26 @@ export class OrdersService {
     });
 
     return order;
+  }
+
+  async printKitchenManual(id: string): Promise<boolean> {
+    const fullOrder = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        items: { 
+          include: { 
+            product: {
+              include: { category: true }
+            } 
+          } 
+        },
+        table: true,
+      },
+    });
+
+    if (!fullOrder) return false;
+
+    // Disparo asíncrono a la impresora de cocina
+    return this.printerService.printKitchenTicket(fullOrder);
   }
 }
