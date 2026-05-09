@@ -263,6 +263,7 @@ async function main() {
     },
 
     // SNACKS
+    { name: 'Cuernito', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 40}] },
     { name: 'Papas Gajo', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 80}] },
     { name: 'Aros de Cebolla', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 80}] },
     { name: 'Salchipapas', categoryId: categories['Snacks'].id, variants: [{name: 'Única', price: 75}] },
