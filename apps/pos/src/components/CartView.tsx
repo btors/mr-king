@@ -1,18 +1,46 @@
 'use client';
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePOSStore, CartItem } from '../store/usePOSStore';
 
 export const CartView: React.FC = () => {
-  const { cart, removeFromCart, updateQuantity, updateNotes, calculateItemPrice, calculateTotal, clearCart, selectedTable, submitOrder, payTable, clearDrafts, isSubmitting, clientName, orderType, payChannelOrder, activeOrders } = usePOSStore();
+  const { cart, removeFromCart, updateQuantity, updateNotes, calculateItemPrice, calculateTotal, clearCart, selectedTable, submitOrder, payTable, clearDrafts, isSubmitting, clientName, orderType, payChannelOrder, activeOrders, user } = usePOSStore();
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [showDraftWarning, setShowDraftWarning] = React.useState(false);
   const [paymentMethod, setPaymentMethod] = React.useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
+  const [receivedAmount, setReceivedAmount] = React.useState<string>('');
+  const [isPrintingReceipt, setIsPrintingReceipt] = React.useState(false);
+  const [printCartItems, setPrintCartItems] = React.useState<CartItem[]>([]);
+  const [printTotal, setPrintTotal] = React.useState<number>(0);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isAdmin = user?.role === 'ADMIN';
+
+  React.useEffect(() => {
+    setReceivedAmount('');
+    if (!showPaymentModal) {
+      setIsPrintingReceipt(false);
+    }
+  }, [showPaymentModal]);
+
+  // Disparador de impresión síncrono y robusto (Sin setTimeouts)
+  React.useEffect(() => {
+    if (printCartItems.length > 0) {
+      window.print();
+    }
+  }, [isPrintingReceipt, printCartItems]);
   
   const handlePrint = () => {
     if (isSubmitting) return;
-    alert('Imprimiendo pre-cuenta...');
+    setIsPrintingReceipt(false);
+    setPrintCartItems([...cart]);
+    setPrintTotal(total);
   };
 
   const handleFinalize = async () => {
@@ -53,21 +81,27 @@ export const CartView: React.FC = () => {
 
   const handlePayment = async () => {
     if (isSubmitting) return;
-    // Table-based payment
+    
+    // 1. Congelar los datos y activar el estado de impresión oficial
+    setPrintCartItems([...cart]);
+    setPrintTotal(total);
+    setIsPrintingReceipt(true); // 👈 Esto activa el useEffect síncronamente al renderizar
+    
+    // 2. Procesar el pago en segundo plano de forma limpia
     if (selectedTable) {
       const success = await payTable(selectedTable.id, paymentMethod);
-      if (success) setShowPaymentModal(false);
+      if (success) {
+        setShowPaymentModal(false);
+      }
       return;
     }
-    // Channel order payment – find the matching active order
+    
     const activeOrder = activeOrders.find(o => o.orderType === orderType && o.clientName === clientName);
     if (activeOrder) {
       const success = await payChannelOrder(activeOrder.id, paymentMethod);
-      if (success) setShowPaymentModal(false);
-    } else {
-      // No prior order – just clear and return
-      clearCart();
-      setShowPaymentModal(false);
+      if (success) {
+        setShowPaymentModal(false);
+      }
     }
   };
 
@@ -239,8 +273,8 @@ export const CartView: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1.02, opacity: 1 }}
               onClick={handleCerrarCuentaClick}
-              disabled={isSubmitting}
-              className={`w-full py-7 rounded-[2rem] bg-emerald-600 text-white font-black text-2xl hover:bg-emerald-500 transition-all shadow-xl tracking-tighter uppercase italic flex items-center justify-center gap-3 active:scale-95 border-b-4 border-emerald-800 disabled:opacity-50 disabled:grayscale ${
+              disabled={isSubmitting || !isAdmin}
+              className={`w-full py-7 rounded-[2rem] bg-emerald-600 text-white font-black text-2xl hover:bg-emerald-500 transition-all shadow-xl tracking-tighter uppercase italic flex items-center justify-center gap-3 active:scale-95 border-b-4 border-emerald-800 disabled:opacity-40 disabled:pointer-events-none disabled:grayscale ${
                 draftCount === 0 
                   ? 'ring-4 ring-emerald-500/30 shadow-emerald-500/20' 
                   : 'opacity-90 grayscale-[0.3]'
@@ -250,8 +284,8 @@ export const CartView: React.FC = () => {
                 <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <span className="text-3xl">💳</span>
-                  Cerrar Cuenta
+                  <span className="text-3xl">{isAdmin ? '💳' : '🔒'}</span>
+                  {isAdmin ? 'Cerrar Cuenta' : 'Cerrar Cuenta (Caja)'}
                 </>
               )}
             </motion.button>
@@ -281,11 +315,11 @@ export const CartView: React.FC = () => {
           
           <button 
             onClick={handlePrint}
-            disabled={cart.length === 0 || isSubmitting}
-            className="w-full py-5 rounded-2xl bg-zinc-800/50 text-zinc-500 font-bold hover:bg-zinc-800 hover:text-white transition disabled:opacity-30 flex items-center justify-center gap-3 text-xs uppercase tracking-widest border border-white/5"
+            disabled={cart.length === 0 || isSubmitting || !isAdmin}
+            className="w-full py-5 rounded-2xl bg-zinc-800/50 text-zinc-500 font-bold hover:bg-zinc-800 hover:text-white transition disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center gap-3 text-xs uppercase tracking-widest border border-white/5"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-            Imprimir Ticket
+            <span>{isAdmin ? '🖨️' : '🔒'}</span>
+            {isAdmin ? 'Imprimir Ticket' : 'Imprimir Pre-cuenta (Caja)'}
           </button>
         </div>
       </footer>
@@ -396,6 +430,34 @@ export const CartView: React.FC = () => {
                 </div>
               </div>
 
+              {paymentMethod === 'CASH' && (
+                <div className="space-y-4 mb-8 bg-black/30 p-6 rounded-[2rem] border border-white/5 text-left">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 ml-1">Monto Recibido</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
+                        <input
+                          type="number"
+                          value={receivedAmount}
+                          onChange={(e) => setReceivedAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-zinc-950 border border-white/10 rounded-2xl py-3.5 pl-8 pr-4 text-white font-black text-lg focus:border-emerald-500 focus:outline-none transition-colors"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col justify-center pl-4">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1">Cambio a Entregar</label>
+                      <div className="text-3xl font-black text-emerald-400 tracking-tight italic">
+                        ${receivedAmount && Number(receivedAmount) > total 
+                          ? (Number(receivedAmount) - total).toFixed(2) 
+                          : '0.00'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-black/40 p-8 rounded-[2rem] border border-white/5 mb-10">
                 <p className="text-xs font-black text-zinc-500 uppercase tracking-[0.3em] mb-2">Total a Pagar</p>
                 <div className="flex items-baseline justify-center gap-2">
@@ -423,6 +485,119 @@ export const CartView: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Renderizar el ticket fuera del layout usando un Portal de React */}
+      {mounted && createPortal(
+        <div className="print-ticket p-4 bg-white text-black font-mono text-xs leading-normal max-w-[74mm] mx-auto text-left">
+          <style>{`
+            .print-ticket {
+              display: none;
+            }
+            @media print {
+              /* Oculta absolutamente todo el sistema de fondo */
+              body > *:not(.print-ticket) {
+                display: none !important;
+              }
+              /* Muestra única y exclusivamente el ticket térmico */
+              .print-ticket {
+                display: block !important;
+                position: relative !important;
+                width: 74mm !important;
+                background: white !important;
+                color: black !important;
+                font-family: monospace !important;
+                margin: 0 auto !important;
+                padding: 4mm !important;
+              }
+              @page {
+                size: 80mm auto;
+                margin: 0 !important;
+              }
+            }
+          `}</style>
+          
+          <div className="text-center space-y-0.5 border-b border-dashed border-black pb-3 mb-3">
+            <h1 className="text-sm font-black tracking-tight">MR-KING SNACK BAR</h1>
+            <p className="text-[10px] uppercase font-bold tracking-wider">
+              {isPrintingReceipt ? '*** TICKET DE COMPRA (PAGADO) ***' : '*** PRE-CUENTA (NO VÁLIDO DE PAGO) ***'}
+            </p>
+            <p className="text-[9px]">{new Date().toLocaleString('es-MX')}</p>
+          </div>
+          <div className="space-y-1 text-[11px] border-b border-dashed border-black pb-3 mb-3">
+            <div className="flex justify-between">
+              <span>Atendido en:</span>
+              <span className="font-bold uppercase">
+                {selectedTable ? `Mesa ${selectedTable.number}` : `${orderType} — ${clientName || 'Cliente'}`}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Comandero:</span>
+              <span className="font-bold uppercase">{user?.name || 'Caja'}</span>
+            </div>
+            {isPrintingReceipt && (
+              <div className="flex justify-between">
+                <span>Método de Pago:</span>
+                <span className="font-bold uppercase">{paymentMethod}</span>
+              </div>
+            )}
+          </div>
+          {/* Listado de Artículos */}
+          <div className="space-y-2 text-[11px] border-b border-dashed border-black pb-3 mb-3">
+            {printCartItems.map((item) => {
+              const product = usePOSStore.getState().products.find(p => p.id === item.productId);
+              return (
+                <div key={item.tempId} className="space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="font-medium">{item.quantity}x {product?.name || item.name || 'Producto'}</span>
+                    <span className="font-bold">${(Number(item.unitPrice || calculateItemPrice(item)) * item.quantity).toFixed(2)}</span>
+                  </div>
+                  {item.metadata && (
+                    <div className="text-[10px] text-zinc-700 italic pl-2 space-y-0.5">
+                      {item.metadata.isHalfAndHalf && (
+                        <p>↳ Mitad: {item.metadata.halfAName || 'N/A'} / {item.metadata.halfBName || 'N/A'}</p>
+                      )}
+                      {item.metadata.isCombo && <p>↳ Con Papas</p>}
+                      {item.metadata.variantName && !item.metadata.isHalfAndHalf && (
+                        <p>↳ Opción: {item.metadata.variantName}</p>
+                      )}
+                      {item.metadata.flavor && <p>↳ Sabor: {item.metadata.flavor}</p>}
+                      {item.metadata.sauces && item.metadata.sauces.length > 0 && (
+                        <p>↳ Salsas: {item.metadata.sauces.join(', ')}</p>
+                      )}
+                    </div>
+                  )}
+                  {item.notes && <p className="text-[10px] text-zinc-700 italic pl-2">↳ Nota: {item.notes}</p>}
+                </div>
+              );
+            })}
+          </div>
+          {/* Desglose de Totales e Información de Efectivo */}
+          <div className="space-y-1.5 text-[11px] border-b border-dashed border-black pb-3 mb-3">
+            <div className="flex justify-between text-xs font-black">
+              <span>TOTAL:</span>
+              <span>${printTotal.toFixed(2)}</span>
+            </div>
+            
+            {isPrintingReceipt && paymentMethod === 'CASH' && receivedAmount && (
+              <div className="space-y-1 text-[11px] pt-1 text-zinc-800">
+                <div className="flex justify-between">
+                  <span>Efectivo Recibido:</span>
+                  <span>${Number(receivedAmount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Su Cambio:</span>
+                  <span>${(Number(receivedAmount) - printTotal).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="text-center pt-4">
+            <p className="text-[10px] font-bold uppercase">¡Gracias por tu preferencia!</p>
+            <p className="text-[9px] text-zinc-500">MR-KING ERP v1.0</p>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
