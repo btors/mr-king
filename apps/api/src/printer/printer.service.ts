@@ -518,19 +518,38 @@ export class PrinterService {
             ? JSON.parse(item.pizzaConfig) 
             : item.pizzaConfig;
             
+          // 1. Tamaño prioritario para la cocina (Ej: Grande, Familiar)
+          const sizeLabel = config.size || config.variantName;
+          if (sizeLabel) {
+            description += `  ${boldOn}TAMANO: ${sizeLabel.toUpperCase()}${boldOff}\n`;
+          }
+
+          // 2. Desglose de Mitad y Mitad
           if (config.isHalfAndHalf) {
-            const halfAName = config.halfA?.product?.name || 'Mitad A';
-            const halfBName = config.halfB?.product?.name || 'Mitad B';
-            description += `  1/2 ${halfAName}\n  1/2 ${halfBName}\n`;
+            const halfAName = config.halfA?.product?.name || config.halfAName || 'Mitad A';
+            const halfBName = config.halfB?.product?.name || config.halfBName || 'Mitad B';
+            description += `  > 1/2 ${halfAName.toUpperCase()}\n  > 1/2 ${halfBName.toUpperCase()}\n`;
           }
           
+          // 3. Desglose de Sabores (Alitas/Boneless)
           if (Array.isArray(config.flavors)) {
             const fDesc = config.flavors.map((f: any) => `${f.pieces}${f.name}`).join(' + ');
-            description += `  (${fDesc})\n`;
-          } else if (config.variantName) {
-            description += `  (${config.variantName})\n`;
-          } else if (config.flavor) {
-            description += `  (${config.flavor})\n`;
+            description += `  SABORES: ${fDesc.toUpperCase()}\n`;
+          } 
+          
+          // 4. Sabor individual (Micheladas)
+          if (config.flavor) {
+            description += `  SABOR: ${config.flavor.toUpperCase()}\n`;
+          }
+
+          // 5. Salsas (Alitas)
+          if (Array.isArray(config.sauces) && config.sauces.length > 0) {
+            description += `  SALSAS: ${config.sauces.join(', ').toUpperCase()}\n`;
+          }
+
+          // 6. Estado de Combo
+          if (config.isCombo) {
+            description += `  ${boldOn}*** CON PAPAS ***${boldOff}\n`;
           }
         } catch (err) {}
       }
