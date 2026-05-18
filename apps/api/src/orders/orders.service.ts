@@ -6,6 +6,10 @@ import { PrinterService } from '../printer/printer.service';
 
 @Injectable()
 export class OrdersService {
+  // Caché en RAM para llaves de idempotencia. 
+  // Evita tickets duplicados si la tablet re-envía una orden por micro-cortes.
+  private processedIdempotencyKeys = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
@@ -14,7 +18,21 @@ export class OrdersService {
   ) {}
 
   async create(createOrderDto: any) {
-    const { items, waiterId, tableId, orderType, clientName, clientType } = createOrderDto;
+    const { items, waiterId, tableId, orderType, clientName, clientType, idempotencyKey } = createOrderDto;
+
+    // 0. IDEMPOTENCY CHECK: Prevenir doble cobro o tickets duplicados
+    if (idempotencyKey) {
+      if (this.processedIdempotencyKeys.has(idempotencyKey)) {
+        console.warn(`[IDEMPOTENCY] Orden rechazada por duplicidad temporal (Key: ${idempotencyKey})`);
+        return { message: 'Orden ya procesada.', idempotencyKey }; // Retornamos 200 OK para limpiar la tablet
+      }
+      this.processedIdempotencyKeys.add(idempotencyKey);
+      
+      // Auto-limpieza de la llave después de 15 minutos
+      setTimeout(() => {
+        this.processedIdempotencyKeys.delete(idempotencyKey);
+      }, 15 * 60 * 1000);
+    }
 
     // Omnichannel validation
     const type = orderType || 'EAT_IN';
@@ -22,16 +40,14 @@ export class OrdersService {
       throw new BadRequestException('El campo clientName es obligatorio para pedidos TAKE_AWAY y DELIVERY.');
     }
 
-    // 0. Server-side validations for Alitas & Boneless flavor desgloses
-    for (const item of items) {
-      if (!item.productId) continue;
-      
+    // 0. Server-side validations for Alitas & Boneless flavor desgloses (PARALLELIZED N+1 FIX)
+    await Promise.all(items.filter((item: any) => item.productId).map(async (item: any) => {
       const product = await this.prisma.product.findUnique({
         where: { id: item.productId },
         include: { category: true }
       });
       
-      if (!product) continue;
+      if (!product) return;
       
       const catName = product.category?.name?.toUpperCase() || '';
       if (catName === 'ALITAS' || catName === 'BONELESS') {
@@ -50,7 +66,7 @@ export class OrdersService {
             const pieces = Number(f.pieces || 0);
             if (pieces > 0) {
               if (pieces % 3 !== 0) {
-                throw new BadRequestException(`Las piezas de sabor '${f.name}' deben ser múltiplos de 3 (recibido: ${pieces}).`);
+                throw new BadRequestException(`Las piezas del sabor '${f.name}' deben ser múltiplos de 3 (ej. 3, 6, 9, 12). Se recibieron ${pieces}.`);
               }
               activeFlavorsCount++;
               totalPieces += pieces;
@@ -95,13 +111,14 @@ export class OrdersService {
       }
     }
 
-    // 1. Calculate prices server-side — never trust frontend prices.
+    // 1. Calculate prices server-side — never trust frontend prices. (PARALLELIZED N+1 FIX)
     //    calculateOrderItemPrice() returns the full line total (unitPrice × qty).
-    const itemsWithPrices: Array<{ item: any; lineTotal: number }> = [];
-    for (const item of items) {
-      const lineTotal = await this.pricingService.calculateOrderItemPrice(item);
-      itemsWithPrices.push({ item, lineTotal });
-    }
+    const itemsWithPrices = await Promise.all(
+      items.map(async (item: any) => ({
+        item,
+        lineTotal: await this.pricingService.calculateOrderItemPrice(item)
+      }))
+    );
     const total = Math.round(itemsWithPrices.reduce((acc, { lineTotal }) => acc + lineTotal, 0) * 100) / 100;
 
     // 2. Check for active order to merge (only for TAKE_AWAY or DELIVERY)

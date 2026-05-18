@@ -88,6 +88,7 @@ interface POSState {
   offlineOrders: any[];
   isSubmitting: boolean;
   isOffline: boolean;
+  isSyncingOffline: boolean;
   
   // Omnichannel
   orderType: OrderType;
@@ -158,6 +159,7 @@ export const usePOSStore = create<POSState>()(
       offlineOrders: [],
       isSubmitting: false,
       isOffline: false,
+      isSyncingOffline: false,
       currentShift: null,
       isShiftLoading: true,
       orderType: 'EAT_IN',
@@ -332,7 +334,7 @@ export const usePOSStore = create<POSState>()(
         return {
           cart: [...state.cart, { 
             ...item, 
-            tempId: Math.random().toString(36).substring(7), 
+            tempId: crypto.randomUUID(), 
             status: 'DRAFT' 
           }]
         };
@@ -368,12 +370,21 @@ export const usePOSStore = create<POSState>()(
       setOfflineStatus: (isOffline) => set({ isOffline }),
 
       processOfflineOrders: async () => {
-        const { offlineOrders, isSubmitting } = get();
-        if (offlineOrders.length === 0 || isSubmitting) return;
+        const { offlineOrders, isSyncingOffline } = get();
+        if (offlineOrders.length === 0 || isSyncingOffline) return;
 
-        set({ isSubmitting: true });
+        set({ isSyncingOffline: true });
         const remaining = [...offlineOrders];
         const toRetry = remaining.shift();
+
+        // CRÍTICO: Auto-Limpieza (TTL) para prevenir ataque DDoS al servidor local.
+        // Si la orden atascada tiene más de 12 horas, es basura y la purgamos.
+        const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+        if (toRetry.timestamp && (Date.now() - toRetry.timestamp) > TWELVE_HOURS_MS) {
+           console.error('Órden offline caducada (>12h). Eliminando automáticamente para prevenir saturación de caché.');
+           set({ offlineOrders: remaining, isSyncingOffline: false });
+           return;
+        }
 
         try {
           await api.post('/orders', toRetry);
@@ -382,14 +393,16 @@ export const usePOSStore = create<POSState>()(
         } catch (err: any) {
           console.error('Retry offline order failed:', err);
           
-          // MISSION 3: If it's a client error (4xx), remove it from the queue
-          const statusCode = err.status || err.response?.status;
-          if (statusCode >= 400 && statusCode < 500) {
-            console.error('Offline order was invalid (4xx), removing from queue:', toRetry);
-            set({ offlineOrders: remaining });
-          }
+          // CRÍTICO: Nunca eliminar silenciosamente órdenes fallidas del limbo. 
+          // Si fallan por validación (ej. Caja Cerrada tras reinicio), se deben mantener
+          // en la cola hasta que el usuario corrija el problema, garantizando 0% de pérdida de datos.
+          const errorMessage = err.response?.data?.message || err.message || 'Error de sincronización';
+          console.error('Orden retenida en cola offline por error:', errorMessage);
+          
+          // La orden fallida NO se elimina, se mantiene al principio de la cola.
+          // El usuario podrá borrarla manualmente con clearOfflineOrders si es irremediable.
         } finally {
-          set({ isSubmitting: false });
+          set({ isSyncingOffline: false });
         }
       },
 
@@ -412,6 +425,8 @@ export const usePOSStore = create<POSState>()(
         set({ isSubmitting: true });
 
         const payload = {
+          idempotencyKey: crypto.randomUUID(),
+          timestamp: Date.now(),
           waiterId: user.id,
           tableId: selectedTable?.id || null,
           orderType: get().orderType,
@@ -492,15 +507,20 @@ export const usePOSStore = create<POSState>()(
             isOffline: false
           }));
 
-          const tables = await api.get<Table[]>('/tables');
-          const updatedTable = tables.find(t => t.id === selectedTable?.id);
-          set({ tables, selectedTable: updatedTable || selectedTable });
-
-          // Actualizar de inmediato órdenes activas de canales y limpiar carrito
           const currentOrderType = get().orderType;
+          
+          // Paralelización para el doble de velocidad
+          const [tables] = await Promise.all([
+            api.get<Table[]>('/tables'),
+            currentOrderType !== 'EAT_IN' ? get().fetchActiveOrders(currentOrderType) : Promise.resolve()
+          ]);
+
+          const updatedTable = tables.find(t => t.id === selectedTable?.id);
+          
           if (currentOrderType !== 'EAT_IN') {
-            await get().fetchActiveOrders(currentOrderType);
-            set({ cart: [], clientName: '', orderType: 'EAT_IN' });
+            set({ tables, selectedTable: updatedTable || selectedTable, cart: [], clientName: '', orderType: 'EAT_IN' });
+          } else {
+            set({ tables, selectedTable: updatedTable || selectedTable });
           }
           return true;
         } catch (err: any) {
@@ -527,7 +547,7 @@ export const usePOSStore = create<POSState>()(
           const allItems = bill.orders.flatMap(order => order.items);
           
           const cartItems: CartItem[] = allItems.map(item => ({
-            tempId: Math.random().toString(36).substring(7),
+            tempId: crypto.randomUUID(),
             productId: item.productId,
             name: item.product.name,
             quantity: item.quantity,
@@ -571,6 +591,10 @@ export const usePOSStore = create<POSState>()(
       })),
 
       clearEverything: () => {
+        if (get().offlineOrders.length > 0) {
+          console.warn('Bloqueo de Seguridad: No se puede limpiar la caché mientras haya órdenes offline pendientes.');
+          return;
+        }
         if (typeof window !== 'undefined') {
           localStorage.clear();
           set({ user: null, selectedTable: null, cart: [], currentShift: null, orderType: 'EAT_IN', clientName: '', activeOrders: [] });
@@ -593,13 +617,13 @@ export const usePOSStore = create<POSState>()(
           });
         } catch (err) {
           console.error('Failed to fetch active orders:', err);
-          set({ activeOrders: [] });
+          // UI Protection: No borramos la pantalla en caso de micro-cortes
         }
       },
 
       loadOrderForEdit: (order) => {
         const cartItems: CartItem[] = order.items.map((item: any) => ({
-          tempId: Math.random().toString(36).substring(7),
+          tempId: crypto.randomUUID(),
           productId: item.productId,
           name: item.product?.name || item.name || 'Producto',
           quantity: item.quantity,
