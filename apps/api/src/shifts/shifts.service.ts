@@ -1,13 +1,40 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrinterService } from '../printer/printer.service';
 
 @Injectable()
-export class ShiftsService {
+export class ShiftsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly printerService: PrinterService,
   ) {}
+
+  async onModuleInit() {
+    // SCRIPT DE LIMPIEZA AUTOMÁTICA (FANTASMAS)
+    // Se ejecuta una vez cada vez que se reinicia el servidor.
+    // Busca órdenes atascadas que tengan más de 12 horas de antigüedad y las cancela.
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    
+    try {
+      const result = await this.prisma.order.updateMany({
+        where: {
+          status: { in: ['PENDING', 'PREPARING', 'READY', 'SERVED'] },
+          createdAt: { lt: twelveHoursAgo },
+        },
+        data: {
+          status: 'CANCELLED',
+        },
+      });
+      
+      if (result.count > 0) {
+        console.log(`[LIMPIEZA AUTOMÁTICA] Se cancelaron ${result.count} órdenes fantasma antiguas (más de 12 horas).`);
+      } else {
+        console.log(`[LIMPIEZA AUTOMÁTICA] No se encontraron órdenes fantasma antiguas.`);
+      }
+    } catch (error) {
+      console.error('[LIMPIEZA AUTOMÁTICA] Error al limpiar órdenes:', error);
+    }
+  }
 
   async openShift(openingBalance: number, userId: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -62,7 +89,9 @@ export class ShiftsService {
         throw new BadRequestException('No hay turno abierto para cerrar.');
       }
 
-      // Check for pending orders before closing
+      // Modificación: Permitimos cerrar el turno aunque haya órdenes pendientes.
+      // Las mesas que estén comiendo durante un cambio de turno pasarán al siguiente turno.
+      // Las órdenes abandonadas serán limpiadas por el onModuleInit en el próximo reinicio.
       const pendingOrdersCount = await tx.order.count({
         where: {
           status: { in: ['PENDING', 'PREPARING', 'READY', 'SERVED'] },
@@ -70,7 +99,7 @@ export class ShiftsService {
       });
 
       if (pendingOrdersCount > 0) {
-        throw new BadRequestException(`No se puede cerrar el turno. Hay ${pendingOrdersCount} órdenes pendientes de cobro.`);
+        console.warn(`[CIERRE DE TURNO] El turno se cerró con ${pendingOrdersCount} órdenes pendientes de cobro.`);
       }
 
       // Calculate expected balance: Opening Balance + Incomes - Expenses

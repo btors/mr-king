@@ -7,6 +7,9 @@ import { exec } from 'child_process';
 
 @Injectable()
 export class PrinterService {
+  private kitchenSpoolerQueue: string[] = [];
+  private isSpoolerActive: boolean = false;
+
   constructor(private readonly prisma: PrismaService) {}
 
   async printOrderTicket(orderId: string): Promise<boolean> {
@@ -425,41 +428,74 @@ export class PrinterService {
 
   async printKitchenTicket(order: any): Promise<boolean> {
     try {
-      const KITCHEN_IP = process.env.KITCHEN_PRINTER_IP || '192.168.0.201';
-      const KITCHEN_PORT = 9100;
-      
-      // 1. Formatear la comanda exclusivamente para Cocina (Sin precios, solo items y notas)
+      // 1. Formatear la comanda exclusivamente para Cocina
       const ticketText = this.formatKitchenTicket(order);
       
-      // Si no hay productos para cocina, omitir el envío de forma silenciosa
+      // Si no hay productos para cocina, omitir el envío
       if (!ticketText) return true;
       
-      // 2. Enviar vía RAW TCP Socket directamente a la IP de la ticketera
-      const client = new net.Socket();
+      // 2. Encolar el ticket en el Spooler de Memoria
+      this.kitchenSpoolerQueue.push(ticketText);
+      console.log(`[SPOOLER] Ticket #${order.id.slice(-6)} encolado. Tickets en cola: ${this.kitchenSpoolerQueue.length}`);
       
-      // Configurar timeout de 3 segundos para no bloquear el flujo en caso de desconexión
-      client.setTimeout(3000); 
-
-      client.connect(KITCHEN_PORT, KITCHEN_IP, () => {
-        client.write(ticketText, 'latin1', () => {
-          client.destroy(); // Cerrar conexión tras envío
-        });
-      });
-      
-      client.on('timeout', () => {
-        console.log('⌛ Timeout connecting to Kitchen Printer');
-        client.destroy();
-      });
-
-      client.on('error', (err) => {
-        console.error('🚨 Fallo al conectar con la impresora de Cocina:', err.message);
-      });
+      // 3. Despertar al Spooler si estaba dormido
+      this.processKitchenSpooler();
       
       return true;
     } catch (e) {
       console.error('Error fatal en printKitchenTicket:', e);
       return false;
     }
+  }
+
+  private async processKitchenSpooler() {
+    if (this.isSpoolerActive || this.kitchenSpoolerQueue.length === 0) return;
+    this.isSpoolerActive = true;
+
+    while (this.kitchenSpoolerQueue.length > 0) {
+      const ticketText = this.kitchenSpoolerQueue[0];
+      
+      try {
+        await this.sendToKitchenPrinterRaw(ticketText);
+        // Si fue exitoso, lo sacamos de la cola
+        this.kitchenSpoolerQueue.shift();
+        console.log(`[SPOOLER] Impresión exitosa. Tickets restantes: ${this.kitchenSpoolerQueue.length}`);
+        // Pequeña pausa de 1 segundo entre tickets para no saturar el buffer de la impresora
+        await new Promise(res => setTimeout(res, 1000));
+      } catch (err: any) {
+        console.warn(`[SPOOLER] Impresora de cocina ocupada o desconectada. Reintentando en 5 segundos... (${err.message})`);
+        await new Promise(res => setTimeout(res, 5000));
+      }
+    }
+
+    this.isSpoolerActive = false;
+  }
+
+  private sendToKitchenPrinterRaw(ticketText: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const KITCHEN_IP = process.env.KITCHEN_PRINTER_IP || '192.168.0.201';
+      const KITCHEN_PORT = 9100;
+      
+      const client = new net.Socket();
+      client.setTimeout(4000); // 4 segundos máximo para conectar/enviar
+
+      client.connect(KITCHEN_PORT, KITCHEN_IP, () => {
+        client.write(ticketText, 'latin1', () => {
+          client.destroy();
+          resolve();
+        });
+      });
+      
+      client.on('timeout', () => {
+        client.destroy();
+        reject(new Error('Timeout: La impresora tardó mucho en responder'));
+      });
+
+      client.on('error', (err) => {
+        client.destroy();
+        reject(err);
+      });
+    });
   }
 
   private formatKitchenTicket(order: any): string {
@@ -550,6 +586,11 @@ export class PrinterService {
           // 6. Estado de Combo
           if (config.isCombo) {
             description += `  ${boldOn}*** CON PAPAS ***${boldOff}\n`;
+          }
+
+          // 7. Variantes / Extras (Ej: Orilla Rellena de Queso)
+          if (Array.isArray(config.variants) && config.variants.length > 0) {
+            description += `  ${boldOn}EXTRAS: ${config.variants.join(', ').toUpperCase()}${boldOff}\n`;
           }
         } catch (err) {}
       }
