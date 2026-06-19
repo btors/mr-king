@@ -3,6 +3,13 @@ import { persist } from 'zustand/middleware';
 import { api, API_BASE_URL } from '../lib/api';
 import { io } from 'socket.io-client';
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 export type Role = 'ADMIN' | 'WAITER' | 'KITCHEN';
 
 export interface User {
@@ -336,7 +343,7 @@ export const usePOSStore = create<POSState>()(
         return {
           cart: [...state.cart, { 
             ...item, 
-            tempId: crypto.randomUUID(), 
+            tempId: generateId(), 
             status: 'DRAFT' 
           }]
         };
@@ -427,7 +434,7 @@ export const usePOSStore = create<POSState>()(
         set({ isSubmitting: true });
 
         const payload = {
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: generateId(),
           timestamp: Date.now(),
           waiterId: user.id,
           tableId: selectedTable?.id || null,
@@ -549,7 +556,7 @@ export const usePOSStore = create<POSState>()(
           const allItems = bill.orders.flatMap(order => order.items);
           
           const cartItems: CartItem[] = allItems.map(item => ({
-            tempId: crypto.randomUUID(),
+            tempId: generateId(),
             productId: item.productId,
             name: item.product.name,
             quantity: item.quantity,
@@ -625,7 +632,7 @@ export const usePOSStore = create<POSState>()(
 
       loadOrderForEdit: (order) => {
         const cartItems: CartItem[] = order.items.map((item: any) => ({
-          tempId: crypto.randomUUID(),
+          tempId: generateId(),
           productId: item.productId,
           name: item.product?.name || item.name || 'Producto',
           quantity: item.quantity,
