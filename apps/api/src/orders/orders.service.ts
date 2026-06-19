@@ -109,7 +109,7 @@ export class OrdersService {
           throw new BadRequestException(`El número de sabores seleccionados (${activeFlavorsCount}) supera el límite permitido (${allowedMaxFlavors}) para la variante '${variantName}' de '${product.name}'.`);
         }
       }
-    }
+    }));
 
     // 1. Calculate prices server-side — never trust frontend prices. (PARALLELIZED N+1 FIX)
     //    calculateOrderItemPrice() returns the full line total (unitPrice × qty).
@@ -223,7 +223,7 @@ export class OrdersService {
           items: {
             create: itemsWithPrices.map(({ item, lineTotal }) => {
               const product = products.find((p) => p.id === item.productId);
-              const isKitchen = product?.category?.preparationPlace === 'KITCHEN';
+              const isKitchen = product?.category?.preparationPlace === 'KITCHEN' || product?.category?.name?.toUpperCase().includes('EXTRA');
               
               return {
                 productId: item.productId,
@@ -359,15 +359,30 @@ export class OrdersService {
     };
 
     if (preparationPlace) {
-      where.items = {
-        some: {
-          product: {
-            category: {
-              preparationPlace: preparationPlace,
+      if (preparationPlace === 'KITCHEN') {
+        where.items = {
+          some: {
+            product: {
+              category: {
+                OR: [
+                  { preparationPlace: 'KITCHEN' },
+                  { name: { contains: 'EXTRA', mode: 'insensitive' } }
+                ]
+              },
             },
           },
-        },
-      };
+        };
+      } else {
+        where.items = {
+          some: {
+            product: {
+              category: {
+                preparationPlace: preparationPlace,
+              },
+            },
+          },
+        };
+      }
     }
 
     const orders = await this.prisma.order.findMany({
@@ -392,7 +407,9 @@ export class OrdersService {
       return orders.map((order) => ({
         ...order,
         items: order.items.filter(
-          (item) => item.product?.category?.preparationPlace === preparationPlace,
+          (item) => 
+            item.product?.category?.preparationPlace === preparationPlace ||
+            (preparationPlace === 'KITCHEN' && item.product?.category?.name?.toUpperCase().includes('EXTRA'))
         ),
       }));
     }

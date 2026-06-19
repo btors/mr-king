@@ -6,13 +6,15 @@ import { Product, usePOSStore } from '../store/usePOSStore';
 
 interface PizzaBuilderProps {
   initialProduct?: Product | null;
+  initialSize?: 'MD' | 'GD' | 'FM' | null;
   isHalfAndHalfOnly?: boolean;
-  onConfirm: (data: { size: string; halfAId: string; halfBId: string; price: number; isHalfAndHalf: boolean }) => void;
+  onConfirm: (data: { size: string; halfAId: string; halfBId: string; price: number; isHalfAndHalf: boolean; wantsStuffedCrust?: boolean; stuffedCrustProductId?: string }) => void;
   onCancel: () => void;
 }
 
 export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ 
   initialProduct, 
+  initialSize,
   isHalfAndHalfOnly, 
   onConfirm, 
   onCancel 
@@ -21,10 +23,19 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
   const pizzaCategory = categories.find(c => c.name.toUpperCase() === 'PIZZAS');
   const pizzas = products.filter(p => p.categoryId === pizzaCategory?.id && p.isActive);
   
-  const [size, setSize] = useState<'MD' | 'GD' | 'FM' | null>(null);
+  const [size, setSize] = useState<'MD' | 'GD' | 'FM' | null>(initialSize || null);
   const [halfA, setHalfA] = useState<Product | null>(initialProduct || null);
   const [halfB, setHalfB] = useState<Product | null>(initialProduct || null);
   const [step, setStep] = useState<'SIZE' | 'A' | 'B'>('SIZE');
+  const [wantsStuffedCrust, setWantsStuffedCrust] = useState(false);
+
+  const stuffedCrustProduct = size ? (products.find(p => {
+    const nameStr = p.name.toUpperCase();
+    if (size === 'FM') return nameStr.includes('ORILLA') && (nameStr.includes('FAM') || nameStr.includes('FM'));
+    return nameStr.includes('ORILLA') && nameStr.includes(size);
+  }) || products.find(p => p.name.toUpperCase().includes('ORILLA'))) : undefined;
+  
+  const stuffedCrustPrice = stuffedCrustProduct ? (stuffedCrustProduct.variants[0]?.price || 0) : 0;
 
   const getPrice = (p: Product | null, currentSize: string | null) => {
     if (!p || !currentSize) return 0;
@@ -42,7 +53,9 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
         halfAId: halfA.id,
         halfBId: halfA.id,
         price: getPrice(halfA, size),
-        isHalfAndHalf: false
+        isHalfAndHalf: false,
+        wantsStuffedCrust,
+        stuffedCrustProductId: stuffedCrustProduct?.id
       });
       return;
     }
@@ -58,7 +71,9 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
         halfAId: halfA.id,
         halfBId: halfB.id,
         price: finalPrice,
-        isHalfAndHalf: true
+        isHalfAndHalf: true,
+        wantsStuffedCrust,
+        stuffedCrustProductId: stuffedCrustProduct?.id
       });
     }
   };
@@ -233,25 +248,40 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
           </div>
         </main>
 
-        <footer className="p-8 border-t border-white/5 flex gap-4 bg-surface-alt/50">
-          <button 
-            onClick={onCancel}
-            className="px-10 py-5 rounded-2xl bg-zinc-800 text-white font-black uppercase tracking-tighter hover:bg-zinc-700 transition-all active:scale-95"
-          >
-            Cancelar
-          </button>
-          <button 
-            disabled={!size || (isHalfAndHalfOnly && (!halfA || !halfB)) || (!isHalfAndHalfOnly && !halfA)}
-            onClick={handleConfirm}
-            className={`flex-1 py-5 rounded-2xl font-black text-2xl italic tracking-tighter uppercase transition-all shadow-2xl active:scale-95
-              ${(!size || (isHalfAndHalfOnly && (!halfA || !halfB)) || (!isHalfAndHalfOnly && !halfA)) 
-                ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed' 
-                : 'bg-amber-500 text-black hover:bg-amber-400'}
-            `}
-          >
-            Confirmar Pizza!
-          </button>
-        </footer>
+        {/* Action Bar */}
+        <div className="p-4 border-t border-white/5 bg-black flex justify-between items-center gap-4">
+          <div className="flex items-center gap-4 flex-1">
+            {size && stuffedCrustProduct && (
+              <button
+                onClick={() => setWantsStuffedCrust(!wantsStuffedCrust)}
+                className={`px-6 py-4 text-lg font-bold rounded-2xl border-2 transition-all flex items-center gap-4
+                  ${wantsStuffedCrust ? 'border-amber-500 bg-amber-500/20 text-amber-500 shadow-lg shadow-amber-500/20' : 'border-white/5 bg-white/5 text-zinc-400 hover:border-white/20'}
+                `}
+              >
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${wantsStuffedCrust ? 'border-amber-500 bg-amber-500 text-black' : 'border-white/30'}`}>
+                  {wantsStuffedCrust && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                </div>
+                <span>Añadir Orilla Rellena (+${stuffedCrustPrice.toFixed(0)})</span>
+              </button>
+            )}
+          </div>
+          
+          <div className="flex gap-4">
+            <button
+              onClick={onCancel}
+              className="px-8 py-4 rounded-2xl font-bold text-white bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={isHalfAndHalfOnly ? (!size || !halfA || !halfB) : !size}
+              className="px-8 py-4 rounded-2xl font-bold text-black bg-amber-500 hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
       </motion.div>
     </div>
   );

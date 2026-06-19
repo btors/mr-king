@@ -40,7 +40,9 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // 2. Notify KDS with filtered data
     const kitchenItems = order.items.filter(
-      (item: any) => item.product?.category?.preparationPlace === 'KITCHEN'
+      (item: any) => 
+        item.product?.category?.preparationPlace === 'KITCHEN' ||
+        item.product?.category?.name?.toUpperCase().includes('EXTRA')
     );
 
     if (kitchenItems.length > 0) {

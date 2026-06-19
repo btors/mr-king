@@ -501,7 +501,7 @@ export class PrinterService {
   private formatKitchenTicket(order: any): string {
     // Filtrar solo productos que requieran preparación en 'KITCHEN'
     const kitchenItems = order.items.filter(
-      (item: any) => item.product?.category?.preparationPlace === 'KITCHEN'
+      (item: any) => item.product?.category?.preparationPlace === 'KITCHEN' || item.product?.category?.name?.toUpperCase().includes('EXTRA')
     );
 
     if (kitchenItems.length === 0) {

@@ -27,6 +27,7 @@ export const MenuView: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [initialPizza, setInitialPizza] = useState<Product | null>(null);
+  const [initialPizzaSize, setInitialPizzaSize] = useState<'MD' | 'GD' | 'FM' | null>(null);
   const [showPizzaBuilder, setShowPizzaBuilder] = useState(false);
   const [isHalfAndHalfMode, setIsHalfAndHalfMode] = useState(false);
   const [showCashClosure, setShowCashClosure] = useState(false);
@@ -111,7 +112,7 @@ export const MenuView: React.FC = () => {
     setSelectedProduct(null);
   };
 
-  const handleHalfAndHalfConfirm = (data: { size: string; halfAId: string; halfBId: string; price: number; isHalfAndHalf: boolean }) => {
+  const handleHalfAndHalfConfirm = (data: { size: string; halfAId: string; halfBId: string; price: number; isHalfAndHalf: boolean; wantsStuffedCrust?: boolean; stuffedCrustProductId?: string }) => {
     const productA = products.find(p => p.id === data.halfAId);
     const productB = products.find(p => p.id === data.halfBId);
 
@@ -134,8 +135,24 @@ export const MenuView: React.FC = () => {
         halfB: productB
       },
     });
+
+    if (data.wantsStuffedCrust && data.stuffedCrustProductId) {
+      const crustProduct = products.find(p => p.id === data.stuffedCrustProductId);
+      if (crustProduct) {
+        addToCart({
+          productId: crustProduct.id,
+          name: crustProduct.name,
+          quantity: 1,
+          unitPrice: crustProduct.variants[0]?.price || 0,
+          notes: `*** APLICA A: PIZZA ${data.size} ***`,
+          metadata: { isStuffedCrust: true, appliedToPizzaSize: data.size }
+        });
+      }
+    }
+
     setShowPizzaBuilder(false);
     setInitialPizza(null);
+    setInitialPizzaSize(null);
     setIsHalfAndHalfMode(false);
   };
 
@@ -274,6 +291,7 @@ export const MenuView: React.FC = () => {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     setInitialPizza(null);
+                    setInitialPizzaSize(null);
                     setIsHalfAndHalfMode(true);
                     setShowPizzaBuilder(true);
                   }}
@@ -343,13 +361,11 @@ export const MenuView: React.FC = () => {
                               whileTap={{ scale: 0.95 }}
                               onClick={() => {
                                 if (isPizzaCategory) {
-                                  handleHalfAndHalfConfirm({
-                                    size: v.name,
-                                    halfAId: product.id,
-                                    halfBId: product.id,
-                                    price: v.price,
-                                    isHalfAndHalf: false
-                                  });
+                                  // Abre el PizzaBuilder para pizzas normales, pre-llenando el tamaño
+                                  setInitialPizza(product);
+                                  setInitialPizzaSize(v.name as 'MD' | 'GD' | 'FM');
+                                  setIsHalfAndHalfMode(false);
+                                  setShowPizzaBuilder(true);
                                 } else if (
                                   catName.toUpperCase() === 'ALITAS' || 
                                   catName.toUpperCase() === 'BONELESS' || 
@@ -389,7 +405,7 @@ export const MenuView: React.FC = () => {
                       )}
 
                       {/* Normal products or Micheladas click area */}
-                      {((!isPizzaCategory && !isComboCategory && catName.toUpperCase() !== 'ALITAS' && catName.toUpperCase() !== 'BONELESS' && !(product.flavors && product.flavors.length > 0) && !(catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada')) && product.variants.length <= 1) || (catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada'))) && (
+                      {((!isPizzaCategory && !isComboCategory && catName.toUpperCase() !== 'ALITAS' && catName.toUpperCase() !== 'BONELESS' && !(product.flavors && product.flavors.length > 0) && !(catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada')) && product.variants.length <= 1) || (catName.toUpperCase() === 'BEBIDAS' && product.name.toLowerCase().includes('michelada'))) && !product.name.toUpperCase().includes('ORILLA') && !product.name.toUpperCase().includes('MITAD Y MITAD') && (
                         <button
                           onClick={() => handleProductClick(product)}
                           className="absolute inset-0 z-0"
@@ -463,14 +479,16 @@ export const MenuView: React.FC = () => {
         )}
 
         {/* Pizza Half-And-Half Builder */}
-        {showPizzaBuilder && (
+        {showPizzaBuilder && (initialPizza || isHalfAndHalfMode) && (
           <PizzaBuilder
             initialProduct={initialPizza}
+            initialSize={initialPizzaSize}
             isHalfAndHalfOnly={isHalfAndHalfMode}
             onConfirm={handleHalfAndHalfConfirm}
             onCancel={() => {
               setShowPizzaBuilder(false);
               setInitialPizza(null);
+              setInitialPizzaSize(null);
               setIsHalfAndHalfMode(false);
             }}
           />

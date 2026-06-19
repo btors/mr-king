@@ -73,6 +73,8 @@ export interface CartItem {
     halfB?: Product;
     sauces?: string[];
     variants?: any[];
+    isStuffedCrust?: boolean;
+    appliedToPizzaSize?: string;
   };
   notes?: string;
 }
