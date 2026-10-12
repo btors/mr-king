@@ -386,30 +386,37 @@ export const usePOSStore = create<POSState>()(
         const remaining = [...offlineOrders];
         const toRetry = remaining.shift();
 
-        // CRÍTICO: Auto-Limpieza (TTL) para prevenir ataque DDoS al servidor local.
-        // Si la orden atascada tiene más de 12 horas, es basura y la purgamos.
-        const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-        if (toRetry.timestamp && (Date.now() - toRetry.timestamp) > TWELVE_HOURS_MS) {
-           console.error('Órden offline caducada (>12h). Eliminando automáticamente para prevenir saturación de caché.');
+        // 1. Auto-Limpieza (TTL de 2 horas):
+        // Si la orden offline tiene más de 2 horas, pertenece a un servicio/turno anterior y se descarta
+        // para prevenir resucitar órdenes fantasma.
+        const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+        if (toRetry.timestamp && (Date.now() - toRetry.timestamp) > TWO_HOURS_MS) {
+           console.warn('[OFFLINE QUEUE] Orden offline descartada por antigüedad (>2h) para evitar órdenes fantasma.');
            set({ offlineOrders: remaining, isSyncingOffline: false });
            return;
         }
 
         try {
-          await api.post('/orders', toRetry);
+          const response: any = await api.post('/orders', toRetry);
+          // Si fue exitosa o el servidor reportó que ya estaba procesada, se remueve de la cola
           set({ offlineOrders: remaining });
-          // If we had more, they will be processed in the next interval/call
+          if (response?.status === 'ALREADY_PROCESSED') {
+            console.log('[OFFLINE QUEUE] Orden reconocida como ya procesada por el servidor. Removida de la cola exitosamente.');
+          }
         } catch (err: any) {
-          console.error('Retry offline order failed:', err);
-          
-          // CRÍTICO: Nunca eliminar silenciosamente órdenes fallidas del limbo. 
-          // Si fallan por validación (ej. Caja Cerrada tras reinicio), se deben mantener
-          // en la cola hasta que el usuario corrija el problema, garantizando 0% de pérdida de datos.
+          const status = err.response?.status;
           const errorMessage = err.response?.data?.message || err.message || 'Error de sincronización';
-          console.error('Orden retenida en cola offline por error:', errorMessage);
-          
-          // La orden fallida NO se elimina, se mantiene al principio de la cola.
-          // El usuario podrá borrarla manualmente con clearOfflineOrders si es irremediable.
+
+          // 2. Errores de Cliente / Validación (400, 404, 409):
+          // Si el servidor rechaza la orden explícitamente (ej. mesa ocupada, clave duplicada, datos inválidos),
+          // se DEBE expulsar de la cola inmediatamente para no ciclar reintentos infinitos cada 10s.
+          if (status && status >= 400 && status < 500) {
+            console.error(`[OFFLINE QUEUE] Orden expulsada de la cola por rechazo del servidor (${status}):`, errorMessage);
+            set({ offlineOrders: remaining });
+          } else {
+            // Solo errores reales de red (timeout / servidor caído) retienen la orden al inicio de la cola
+            console.warn('[OFFLINE QUEUE] Fallo de red temporal. Se reintentará en el siguiente ciclo:', errorMessage);
+          }
         } finally {
           set({ isSyncingOffline: false });
         }
@@ -678,7 +685,7 @@ export const usePOSStore = create<POSState>()(
       openShift: async (openingBalance: number) => {
         try {
           const shift = await api.post<any>('/shifts/open', { openingBalance });
-          set({ currentShift: shift });
+          set({ currentShift: shift, offlineOrders: [] });
           return true;
         } catch (err) {
           console.error('Failed to open shift:', err);
@@ -689,7 +696,7 @@ export const usePOSStore = create<POSState>()(
       closeShift: async (actualBalance: number) => {
         try {
           await api.post('/shifts/close', { actualBalance });
-          set({ currentShift: null, user: null, cart: [], selectedTable: null });
+          set({ currentShift: null, user: null, cart: [], selectedTable: null, offlineOrders: [] });
           if (typeof window !== 'undefined') {
             window.location.href = '/';
           }

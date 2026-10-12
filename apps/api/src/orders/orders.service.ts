@@ -4,34 +4,74 @@ import { PricingService } from '../pricing/pricing.service';
 import { OrdersGateway } from '../events/orders.gateway';
 import { PrinterService } from '../printer/printer.service';
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 @Injectable()
 export class OrdersService {
-  // Caché en RAM para llaves de idempotencia. 
-  // Evita tickets duplicados si la tablet re-envía una orden por micro-cortes.
-  private processedIdempotencyKeys = new Set<string>();
+  // Caché persistente en disco (temp_prints/idempotency_cache.json) con retención de 24 horas.
+  // Sobrevive a reinicios de Docker para evitar que reconexiones de tablets dupliquen órdenes.
+  private idempotencyCache = new Map<string, number>();
+  private readonly idempotencyFilePath = path.join(process.cwd(), 'temp_prints', 'idempotency_cache.json');
+  private readonly TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
     private readonly ordersGateway: OrdersGateway,
     private readonly printerService: PrinterService,
-  ) {}
+  ) {
+    this.loadIdempotencyCache();
+  }
+
+  private loadIdempotencyCache() {
+    try {
+      if (fs.existsSync(this.idempotencyFilePath)) {
+        const data = JSON.parse(fs.readFileSync(this.idempotencyFilePath, 'utf8'));
+        const now = Date.now();
+        for (const [key, timestamp] of Object.entries(data)) {
+          if (now - (timestamp as number) < this.TWENTY_FOUR_HOURS_MS) {
+            this.idempotencyCache.set(key, timestamp as number);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[IDEMPOTENCY] No se pudo cargar el archivo de caché de idempotencia previo:', e);
+    }
+  }
+
+  private saveIdempotencyCache() {
+    try {
+      const dir = path.dirname(this.idempotencyFilePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const obj: Record<string, number> = {};
+      const now = Date.now();
+      for (const [key, ts] of this.idempotencyCache.entries()) {
+        if (now - ts < this.TWENTY_FOUR_HOURS_MS) {
+          obj[key] = ts;
+        }
+      }
+      fs.writeFileSync(this.idempotencyFilePath, JSON.stringify(obj), 'utf8');
+    } catch (e) {
+      console.error('[IDEMPOTENCY] Error guardando caché de idempotencia en disco:', e);
+    }
+  }
 
   async create(createOrderDto: any) {
     const { items, waiterId, tableId, orderType, clientName, clientType, idempotencyKey } = createOrderDto;
 
     // 0. IDEMPOTENCY CHECK: Prevenir doble cobro o tickets duplicados
     if (idempotencyKey) {
-      if (this.processedIdempotencyKeys.has(idempotencyKey)) {
-        console.warn(`[IDEMPOTENCY] Orden rechazada por duplicidad temporal (Key: ${idempotencyKey})`);
-        return { message: 'Orden ya procesada.', idempotencyKey }; // Retornamos 200 OK para limpiar la tablet
+      const now = Date.now();
+      const existingTimestamp = this.idempotencyCache.get(idempotencyKey);
+      if (existingTimestamp && (now - existingTimestamp < this.TWENTY_FOUR_HOURS_MS)) {
+        console.warn(`[IDEMPOTENCY] Orden duplicada evitada por clave persistente (Key: ${idempotencyKey})`);
+        return { message: 'Orden ya procesada anteriormente.', status: 'ALREADY_PROCESSED', idempotencyKey };
       }
-      this.processedIdempotencyKeys.add(idempotencyKey);
       
-      // Auto-limpieza de la llave después de 15 minutos
-      setTimeout(() => {
-        this.processedIdempotencyKeys.delete(idempotencyKey);
-      }, 15 * 60 * 1000);
+      this.idempotencyCache.set(idempotencyKey, now);
+      // Guardar en disco de forma no bloqueante
+      setImmediate(() => this.saveIdempotencyCache());
     }
 
     // Omnichannel validation
@@ -121,14 +161,16 @@ export class OrdersService {
     );
     const total = Math.round(itemsWithPrices.reduce((acc, { lineTotal }) => acc + lineTotal, 0) * 100) / 100;
 
-    // 2. Check for active order to merge (only for TAKE_AWAY or DELIVERY)
+    // 2. Check for active order to merge (only for TAKE_AWAY or DELIVERY within 45 minutes)
     let activeOrder: any = null;
     if ((type === 'TAKE_AWAY' || type === 'DELIVERY') && clientName?.trim()) {
+      const fortyFiveMinutesAgo = new Date(Date.now() - 45 * 60 * 1000);
       activeOrder = await this.prisma.order.findFirst({
         where: {
           clientName: { equals: clientName.trim(), mode: 'insensitive' },
           orderType: type,
-          status: { in: ['PENDING', 'PREPARING', 'READY'] }
+          status: { in: ['PENDING', 'PREPARING', 'READY'] },
+          createdAt: { gte: fortyFiveMinutesAgo } // Ventana de 45m para evitar fusionar órdenes de turnos pasados
         },
         include: { items: true }
       });
@@ -162,7 +204,7 @@ export class OrdersService {
         await tx.orderItem.createMany({
           data: itemsWithPrices.map(({ item, lineTotal }) => {
             const product = products.find((p) => p.id === item.productId);
-            const isKitchen = product?.category?.preparationPlace === 'KITCHEN';
+            const isKitchen = product?.category?.preparationPlace === 'KITCHEN' || product?.category?.name?.toUpperCase().includes('EXTRA');
             
             return {
               orderId: activeOrder.id,

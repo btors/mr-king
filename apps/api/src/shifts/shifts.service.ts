@@ -10,29 +10,61 @@ export class ShiftsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // SCRIPT DE LIMPIEZA AUTOMÁTICA (FANTASMAS)
-    // Se ejecuta una vez cada vez que se reinicia el servidor.
-    // Busca órdenes atascadas que tengan más de 12 horas de antigüedad y las cancela.
+    // 1. Ejecutar limpieza inicial al arrancar el servidor
+    await this.purgeOrphanOrders();
+
+    // 2. Ejecutar limpieza periódica automática cada 30 minutos en segundo plano
+    // Garantiza que órdenes huérfanas se cancelen y liberen mesas aunque el servidor no se reinicie
+    setInterval(() => {
+      this.purgeOrphanOrders().catch(err => {
+        console.error('[PURGA PERIÓDICA] Error en tarea automática:', err);
+      });
+    }, 30 * 60 * 1000);
+  }
+
+  private async purgeOrphanOrders() {
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
     
     try {
-      const result = await this.prisma.order.updateMany({
+      // Buscar órdenes atascadas para identificar las mesas afectadas
+      const stuckOrders = await this.prisma.order.findMany({
         where: {
           status: { in: ['PENDING', 'PREPARING', 'READY', 'SERVED'] },
           createdAt: { lt: twelveHoursAgo },
         },
-        data: {
-          status: 'CANCELLED',
-        },
+        select: { id: true, tableId: true },
       });
-      
-      if (result.count > 0) {
-        console.log(`[LIMPIEZA AUTOMÁTICA] Se cancelaron ${result.count} órdenes fantasma antiguas (más de 12 horas).`);
-      } else {
-        console.log(`[LIMPIEZA AUTOMÁTICA] No se encontraron órdenes fantasma antiguas.`);
+
+      if (stuckOrders.length === 0) return;
+
+      // Cancelar las órdenes atascadas
+      const orderIds = stuckOrders.map(o => o.id);
+      await this.prisma.order.updateMany({
+        where: { id: { in: orderIds } },
+        data: { status: 'CANCELLED' },
+      });
+
+      console.log(`[LIMPIEZA AUTOMÁTICA] Se cancelaron ${stuckOrders.length} órdenes fantasma antiguas (>12h).`);
+
+      // Liberar mesas que hayan quedado sin órdenes activas
+      const tableIds = Array.from(new Set(stuckOrders.map(o => o.tableId).filter(Boolean))) as string[];
+      for (const tableId of tableIds) {
+        const remaining = await this.prisma.order.count({
+          where: {
+            tableId,
+            status: { in: ['PENDING', 'PREPARING', 'READY', 'SERVED'] },
+          },
+        });
+        if (remaining === 0) {
+          await this.prisma.table.update({
+            where: { id: tableId },
+            data: { status: 'AVAILABLE' },
+          });
+          console.log(`[LIMPIEZA AUTOMÁTICA] Mesa ${tableId} liberada automáticamente.`);
+        }
       }
     } catch (error) {
-      console.error('[LIMPIEZA AUTOMÁTICA] Error al limpiar órdenes:', error);
+      console.error('[LIMPIEZA AUTOMÁTICA] Error al limpiar órdenes huérfanas:', error);
     }
   }
 

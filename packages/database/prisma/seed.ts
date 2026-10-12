@@ -279,6 +279,9 @@ async function main() {
     { name: 'Orilla de Queso MD', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 45}] },
     { name: 'Orilla de Queso GD', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 65}] },
     { name: 'Orilla de Queso FAM', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 85}] },
+    { name: 'Orilla de Salchicha MD', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 45}] },
+    { name: 'Orilla de Salchicha GD', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 65}] },
+    { name: 'Orilla de Salchicha FAM', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 85}] },
     { name: 'Pizza Mitad y Mitad (Costo Extra)', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 15}] },
     { name: 'Ingrediente Extra PZ', categoryId: categories['Extras'].id, variants: [{name: 'Única', price: 15}] },
 

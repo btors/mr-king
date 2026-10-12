@@ -27,15 +27,26 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
   const [halfA, setHalfA] = useState<Product | null>(initialProduct || null);
   const [halfB, setHalfB] = useState<Product | null>(initialProduct || null);
   const [step, setStep] = useState<'SIZE' | 'A' | 'B'>('SIZE');
-  const [wantsStuffedCrust, setWantsStuffedCrust] = useState(false);
+  const [selectedCrust, setSelectedCrust] = useState<'QUESO' | 'SALCHICHA' | null>(null);
 
-  const stuffedCrustProduct = size ? (products.find(p => {
-    const nameStr = p.name.toUpperCase();
-    if (size === 'FM') return nameStr.includes('ORILLA') && (nameStr.includes('FAM') || nameStr.includes('FM'));
-    return nameStr.includes('ORILLA') && nameStr.includes(size);
-  }) || products.find(p => p.name.toUpperCase().includes('ORILLA'))) : undefined;
-  
-  const stuffedCrustPrice = stuffedCrustProduct ? (stuffedCrustProduct.variants[0]?.price || 0) : 0;
+  const getCrustProduct = (type: 'QUESO' | 'SALCHICHA') => {
+    if (!size) return undefined;
+    return products.find(p => {
+      const name = p.name.toUpperCase();
+      const matchesType = type === 'QUESO' 
+        ? (name.includes('QUESO') || (!name.includes('SALCHICHA') && !name.includes('SALCH'))) 
+        : (name.includes('SALCHICHA') || name.includes('SALCH'));
+      
+      if (size === 'FM') {
+        return name.includes('ORILLA') && matchesType && (name.includes('FAM') || name.includes('FM'));
+      }
+      return name.includes('ORILLA') && matchesType && name.includes(size);
+    });
+  };
+
+  const cheeseCrustProduct = getCrustProduct('QUESO');
+  const sausageCrustProduct = getCrustProduct('SALCHICHA');
+  const activeCrustProduct = selectedCrust === 'QUESO' ? cheeseCrustProduct : selectedCrust === 'SALCHICHA' ? sausageCrustProduct : undefined;
 
   const getPrice = (p: Product | null, currentSize: string | null) => {
     if (!p || !currentSize) return 0;
@@ -54,8 +65,8 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
         halfBId: halfA.id,
         price: getPrice(halfA, size),
         isHalfAndHalf: false,
-        wantsStuffedCrust,
-        stuffedCrustProductId: stuffedCrustProduct?.id
+        wantsStuffedCrust: !!selectedCrust,
+        stuffedCrustProductId: activeCrustProduct?.id
       });
       return;
     }
@@ -72,8 +83,8 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
         halfBId: halfB.id,
         price: finalPrice,
         isHalfAndHalf: true,
-        wantsStuffedCrust,
-        stuffedCrustProductId: stuffedCrustProduct?.id
+        wantsStuffedCrust: !!selectedCrust,
+        stuffedCrustProductId: activeCrustProduct?.id
       });
     }
   };
@@ -250,19 +261,39 @@ export const PizzaBuilder: React.FC<PizzaBuilderProps> = ({
 
         {/* Action Bar */}
         <div className="p-4 border-t border-white/5 bg-black flex justify-between items-center gap-4">
-          <div className="flex items-center gap-4 flex-1">
-            {size && stuffedCrustProduct && (
-              <button
-                onClick={() => setWantsStuffedCrust(!wantsStuffedCrust)}
-                className={`px-6 py-4 text-lg font-bold rounded-2xl border-2 transition-all flex items-center gap-4
-                  ${wantsStuffedCrust ? 'border-amber-500 bg-amber-500/20 text-amber-500 shadow-lg shadow-amber-500/20' : 'border-white/5 bg-white/5 text-zinc-400 hover:border-white/20'}
-                `}
-              >
-                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${wantsStuffedCrust ? 'border-amber-500 bg-amber-500 text-black' : 'border-white/30'}`}>
-                  {wantsStuffedCrust && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                </div>
-                <span>Añadir Orilla Rellena (+${stuffedCrustPrice.toFixed(0)})</span>
-              </button>
+          <div className="flex items-center gap-3 flex-1 flex-wrap">
+            {size && (
+              <>
+                {cheeseCrustProduct && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCrust(selectedCrust === 'QUESO' ? null : 'QUESO')}
+                    className={`px-5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl border-2 transition-all flex items-center gap-2.5
+                      ${selectedCrust === 'QUESO' ? 'border-amber-500 bg-amber-500/20 text-amber-400 shadow-lg shadow-amber-500/20' : 'border-white/5 bg-white/5 text-zinc-400 hover:border-white/20'}
+                    `}
+                  >
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${selectedCrust === 'QUESO' ? 'border-amber-500 bg-amber-500 text-black' : 'border-white/30'}`}>
+                      {selectedCrust === 'QUESO' && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                    <span>🧀 Orilla Queso (+${(cheeseCrustProduct.variants[0]?.price || 0).toFixed(0)})</span>
+                  </button>
+                )}
+
+                {sausageCrustProduct && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCrust(selectedCrust === 'SALCHICHA' ? null : 'SALCHICHA')}
+                    className={`px-5 py-3 text-sm font-black uppercase tracking-tight rounded-2xl border-2 transition-all flex items-center gap-2.5
+                      ${selectedCrust === 'SALCHICHA' ? 'border-amber-500 bg-amber-500/20 text-amber-400 shadow-lg shadow-amber-500/20' : 'border-white/5 bg-white/5 text-zinc-400 hover:border-white/20'}
+                    `}
+                  >
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${selectedCrust === 'SALCHICHA' ? 'border-amber-500 bg-amber-500 text-black' : 'border-white/30'}`}>
+                      {selectedCrust === 'SALCHICHA' && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                    <span>🌭 Orilla Salchicha (+${(sausageCrustProduct.variants[0]?.price || 0).toFixed(0)})</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
           

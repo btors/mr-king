@@ -14,10 +14,11 @@ if exist .env goto env_exists
 echo [*] Creando archivo de configuracion .env...
 echo ADMIN_PIN=1234>.env
 echo WAITER_PIN=0000>>.env
-echo DB_USER=mrking_user>>.env
-echo DB_PASSWORD=mrking_password>>.env
-echo DB_NAME=mrking_db>>.env
-echo NEXT_PUBLIC_API_URL=/api>>.env
+echo KITCHEN_PRINTER_IP=192.168.3.201>>.env
+echo KITCHEN_PRINTER_PORT=9100>>.env
+echo CASH_PRINTER_NAME=Caja_Printer>>.env
+echo PRINTER_RELAY_HOST=host.docker.internal>>.env
+echo PRINTER_RELAY_PORT=9101>>.env
 echo [OK] Archivo .env creado con exito.
 goto start_docker
 
@@ -72,12 +73,12 @@ echo ===================================================
 echo           INSTALACION COMPLETA CON EXITO
 echo ===================================================
 echo.
-echo Para que las tablets funcionen siempre, asegurate de
-echo configurar la IP de esta PC como estatica: 192.168.1.200
+echo Direcciones de Acceso en tu Red:
+echo  - Desde esta PC Servidor: http://localhost/
+echo  - Desde las Tablets:     http://mrking/
+echo  - Desde la Cocina (KDS): http://mrking/kds
 echo.
-echo Direcciones de Acceso:
-echo  - Desde esta PC: http://localhost/
-echo  - Desde las Tablets: http://192.168.1.200/
-echo  - Desde la Cocina: http://192.168.1.200/kds
+echo (Asegurate de que las tablets esten conectadas a la red Wi-Fi
+echo  de tu router Huawei para acceder mediante http://mrking/).
 echo.
 pause

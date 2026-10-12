@@ -40,9 +40,13 @@ export class PrinterService {
       const tempFile = path.join(tempDir, `ticket_${order.id.slice(-6)}.txt`);
       fs.writeFileSync(tempFile, ticketText, 'utf-8');
 
+      const cashPrinterName = process.env.CASH_PRINTER_NAME || 'Caja_Printer';
+      const relayHost = process.env.PRINTER_RELAY_HOST || 'host.docker.internal';
+      const relayPort = Number(process.env.PRINTER_RELAY_PORT) || 9101;
+
       // 3. Spool to shared Windows printer
       if (process.platform === 'win32') {
-        const printerPath = '\\\\localhost\\Caja_Printer';
+        const printerPath = `\\\\localhost\\${cashPrinterName}`;
         // Native Windows command to print raw file to UNC path
         exec(`copy /B "${tempFile}" "${printerPath}"`, (err) => {
           if (err) console.error(`Error de impresión en Windows: ${err.message}`);
@@ -53,8 +57,8 @@ export class PrinterService {
         const http = require('http');
         const payload = ticketText;
         const req = http.request({
-          hostname: process.env.PRINTER_HOST || 'host.docker.internal',
-          port: 9101,
+          hostname: relayHost,
+          port: relayPort,
           path: '/print/',
           method: 'POST',
           headers: {
@@ -77,7 +81,7 @@ export class PrinterService {
         req.end();
 
         function fallbackSMB() {
-          const printerPath = '//host.docker.internal/Caja_Printer';
+          const printerPath = `//${relayHost}/${cashPrinterName}`;
           exec(`smbclient "${printerPath}" -N -c "print ${tempFile}"`, (err) => {
             if (err) {
               console.log('--- SIMULANDO TICKETERA ESC/POS (80mm) ---');
@@ -452,19 +456,30 @@ export class PrinterService {
     if (this.isSpoolerActive || this.kitchenSpoolerQueue.length === 0) return;
     this.isSpoolerActive = true;
 
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
+
     while (this.kitchenSpoolerQueue.length > 0) {
       const ticketText = this.kitchenSpoolerQueue[0];
       
       try {
         await this.sendToKitchenPrinterRaw(ticketText);
-        // Si fue exitoso, lo sacamos de la cola
+        // Si fue exitoso, lo sacamos de la cola y reseteamos reintentos
         this.kitchenSpoolerQueue.shift();
-        console.log(`[SPOOLER] Impresión exitosa. Tickets restantes: ${this.kitchenSpoolerQueue.length}`);
-        // Pequeña pausa de 1 segundo entre tickets para no saturar el buffer de la impresora
+        retryCount = 0;
+        console.log(`[SPOOLER] Impresión exitosa en cocina. Tickets restantes: ${this.kitchenSpoolerQueue.length}`);
+        // Pequeña pausa de 1 segundo entre tickets para no saturar el buffer
         await new Promise(res => setTimeout(res, 1000));
       } catch (err: any) {
-        console.warn(`[SPOOLER] Impresora de cocina ocupada o desconectada. Reintentando en 5 segundos... (${err.message})`);
-        await new Promise(res => setTimeout(res, 5000));
+        retryCount++;
+        if (retryCount >= MAX_RETRIES) {
+          console.error(`[SPOOLER] Impresora de cocina inalcanzable tras ${MAX_RETRIES} intentos. Descartando ticket para no bloquear el sistema.`);
+          this.kitchenSpoolerQueue.shift(); // Descartar ticket atascado
+          retryCount = 0;
+        } else {
+          console.warn(`[SPOOLER] Impresora de cocina ocupada o desconectada (Intento ${retryCount}/${MAX_RETRIES}). Reintentando en 3 segundos... (${err.message})`);
+          await new Promise(res => setTimeout(res, 3000));
+        }
       }
     }
 
@@ -473,11 +488,11 @@ export class PrinterService {
 
   private sendToKitchenPrinterRaw(ticketText: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const KITCHEN_IP = process.env.KITCHEN_PRINTER_IP || '192.168.0.201';
-      const KITCHEN_PORT = 9100;
+      const KITCHEN_IP = process.env.KITCHEN_PRINTER_IP || '192.168.3.201';
+      const KITCHEN_PORT = Number(process.env.KITCHEN_PRINTER_PORT) || 9100;
       
       const client = new net.Socket();
-      client.setTimeout(4000); // 4 segundos máximo para conectar/enviar
+      client.setTimeout(3000); // 3 segundos máximo para conectar/enviar
 
       client.connect(KITCHEN_PORT, KITCHEN_IP, () => {
         client.write(ticketText, 'latin1', () => {
@@ -488,7 +503,7 @@ export class PrinterService {
       
       client.on('timeout', () => {
         client.destroy();
-        reject(new Error('Timeout: La impresora tardó mucho en responder'));
+        reject(new Error(`Timeout: La impresora en ${KITCHEN_IP}:${KITCHEN_PORT} tardó más de 3s en responder`));
       });
 
       client.on('error', (err) => {

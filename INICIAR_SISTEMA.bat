@@ -19,6 +19,7 @@ start /min powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File print_re
 
 echo.
 echo [OK] Servidores activos.
-echo [*] Abriendo Punto de Venta en el navegador local...
+echo [*] Abriendo Punto de Venta en esta PC: http://localhost/
+echo [*] Direccion para tablets y cocina:     http://mrking/
 start http://localhost/
 timeout /t 5
