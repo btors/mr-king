@@ -483,6 +483,7 @@ export class OrdersService {
   }
 
   async printKitchenManual(id: string): Promise<boolean> {
+    console.log(`[ORDERS_SERVICE] 🔍 Buscando orden #${id.slice(-6)} para reimpresión manual en cocina...`);
     const fullOrder = await this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -497,8 +498,12 @@ export class OrdersService {
       },
     });
 
-    if (!fullOrder) return false;
+    if (!fullOrder) {
+      console.warn(`[ORDERS_SERVICE] ⚠️ No se encontró la orden #${id} en la base de datos.`);
+      return false;
+    }
 
+    console.log(`[ORDERS_SERVICE] 📦 Orden #${id.slice(-6)} cargada (${fullOrder.items?.length || 0} ítems). Enviando comanda a PrinterService...`);
     // Disparo asíncrono a la impresora de cocina
     return this.printerService.printKitchenTicket(fullOrder);
   }

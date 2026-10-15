@@ -41,7 +41,8 @@ export class OrdersController {
   @Post(':id/print-kitchen')
   @Public()
   async printKitchen(@Param('id') id: string) {
+    console.log(`[ORDERS_CONTROLLER] 🛎️ Solicitud de reimpresión de comanda recibida para orden #${id ? id.slice(-6) : id}`);
     const success = await this.ordersService.printKitchenManual(id);
-    return { success };
+    return { success, orderId: id, timestamp: new Date().toISOString() };
   }
 }

@@ -432,15 +432,19 @@ export class PrinterService {
 
   async printKitchenTicket(order: any): Promise<boolean> {
     try {
+      console.log(`[PRINTER] Procesando comanda de cocina para orden #${order?.id ? order.id.slice(-6) : 'DESC'}`);
       // 1. Formatear la comanda exclusivamente para Cocina
       const ticketText = this.formatKitchenTicket(order);
       
       // Si no hay productos para cocina, omitir el envío
-      if (!ticketText) return true;
+      if (!ticketText) {
+        console.warn(`[PRINTER] Orden #${order?.id ? order.id.slice(-6) : 'DESC'} no generó contenido para comanda. Omitiendo.`);
+        return true;
+      }
       
       // 2. Encolar el ticket en el Spooler de Memoria
       this.kitchenSpoolerQueue.push(ticketText);
-      console.log(`[SPOOLER] Ticket #${order.id.slice(-6)} encolado. Tickets en cola: ${this.kitchenSpoolerQueue.length}`);
+      console.log(`[SPOOLER] Ticket #${order.id.slice(-6)} encolado con éxito. Total en cola: ${this.kitchenSpoolerQueue.length}`);
       
       // 3. Despertar al Spooler si estaba dormido
       this.processKitchenSpooler();
@@ -467,17 +471,17 @@ export class PrinterService {
         // Si fue exitoso, lo sacamos de la cola y reseteamos reintentos
         this.kitchenSpoolerQueue.shift();
         retryCount = 0;
-        console.log(`[SPOOLER] Impresión exitosa en cocina. Tickets restantes: ${this.kitchenSpoolerQueue.length}`);
+        console.log(`[SPOOLER] ✅ Impresión exitosa en cocina. Tickets restantes en cola: ${this.kitchenSpoolerQueue.length}`);
         // Pequeña pausa de 1 segundo entre tickets para no saturar el buffer
         await new Promise(res => setTimeout(res, 1000));
       } catch (err: any) {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          console.error(`[SPOOLER] Impresora de cocina inalcanzable tras ${MAX_RETRIES} intentos. Descartando ticket para no bloquear el sistema.`);
+          console.error(`[SPOOLER] ❌ Impresora de cocina inalcanzable tras ${MAX_RETRIES} intentos. Descartando ticket para no bloquear el sistema. Causa: ${err.message}`);
           this.kitchenSpoolerQueue.shift(); // Descartar ticket atascado
           retryCount = 0;
         } else {
-          console.warn(`[SPOOLER] Impresora de cocina ocupada o desconectada (Intento ${retryCount}/${MAX_RETRIES}). Reintentando en 3 segundos... (${err.message})`);
+          console.warn(`[SPOOLER] ⚠️ Impresora de cocina no respondió (Intento ${retryCount}/${MAX_RETRIES}). Reintentando en 3 segundos... Causa: ${err.message}`);
           await new Promise(res => setTimeout(res, 3000));
         }
       }
@@ -488,39 +492,70 @@ export class PrinterService {
 
   private sendToKitchenPrinterRaw(ticketText: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const KITCHEN_IP = process.env.KITCHEN_PRINTER_IP || '192.168.3.201';
+      // Prioridad a la IP fija solicitada para producción: 192.168.3.201
+      const rawEnvIp = process.env.KITCHEN_PRINTER_IP?.trim();
+      // Si la variable de entorno tiene IPs viejas de subredes anteriores (.0.x o .1.x), forzar 192.168.3.201
+      const KITCHEN_IP = (rawEnvIp && !rawEnvIp.startsWith('192.168.0.') && !rawEnvIp.startsWith('192.168.1.'))
+        ? rawEnvIp
+        : '192.168.3.201';
       const KITCHEN_PORT = Number(process.env.KITCHEN_PRINTER_PORT) || 9100;
       
+      console.log(`[PRINTER RAW] 🔌 Conectando con impresora de cocina en TCP ${KITCHEN_IP}:${KITCHEN_PORT}...`);
+      
       const client = new net.Socket();
-      client.setTimeout(3000); // 3 segundos máximo para conectar/enviar
+      let isSettled = false;
+
+      // Timeout explícito de conexión y transmisión de 6 segundos
+      const timeoutTimer = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          client.destroy();
+          const err = new Error(`Timeout de 6s agotado esperando respuesta de ${KITCHEN_IP}:${KITCHEN_PORT}`);
+          console.error(`[PRINTER RAW TIMEOUT] ${err.message}`);
+          reject(err);
+        }
+      }, 6000);
 
       client.connect(KITCHEN_PORT, KITCHEN_IP, () => {
+        console.log(`[PRINTER RAW] 📄 Conectado a ${KITCHEN_IP}:${KITCHEN_PORT}. Transfiriendo datos (${Buffer.byteLength(ticketText, 'latin1')} bytes)...`);
         client.write(ticketText, 'latin1', () => {
-          client.destroy();
-          resolve();
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(timeoutTimer);
+            client.destroy();
+            console.log(`[PRINTER RAW] 🖨️ Datos enviados correctamente a la impresora en ${KITCHEN_IP}:${KITCHEN_PORT}.`);
+            resolve();
+          }
         });
-      });
-      
-      client.on('timeout', () => {
-        client.destroy();
-        reject(new Error(`Timeout: La impresora en ${KITCHEN_IP}:${KITCHEN_PORT} tardó más de 3s en responder`));
       });
 
       client.on('error', (err) => {
-        client.destroy();
-        reject(err);
+        if (!isSettled) {
+          isSettled = true;
+          clearTimeout(timeoutTimer);
+          client.destroy();
+          console.error(`[PRINTER RAW ERROR] Error en socket TCP hacia ${KITCHEN_IP}:${KITCHEN_PORT}:`, err.message);
+          reject(err);
+        }
       });
     });
   }
 
   private formatKitchenTicket(order: any): string {
     // Filtrar solo productos que requieran preparación en 'KITCHEN'
-    const kitchenItems = order.items.filter(
+    let kitchenItems = (order.items || []).filter(
       (item: any) => item.product?.category?.preparationPlace === 'KITCHEN' || item.product?.category?.name?.toUpperCase().includes('EXTRA')
     );
 
+    // Fallback de seguridad: si ningún ítem tiene marcada categoría KITCHEN pero hay ítems en la orden,
+    // imprimirlos todos para no dejar al cocinero sin comanda.
+    if (kitchenItems.length === 0 && order.items && order.items.length > 0) {
+      console.warn(`[PRINTER] Aviso: Ningún ítem tiene category.preparationPlace === 'KITCHEN'. Imprimiendo todos los ítems como fallback de seguridad.`);
+      kitchenItems = order.items;
+    }
+
     if (kitchenItems.length === 0) {
-      return ''; // Retornar cadena vacía si no hay ítems de cocina
+      return ''; // Retornar cadena vacía si no hay ítems
     }
 
     const divider = '--------------------------------\n';

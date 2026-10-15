@@ -92,10 +92,22 @@ Si al actualizar o arrancar en el nuevo equipo algo falla, revisa esta tabla pas
   * *Solución:* Abre PowerShell en la PC servidora y escribe `ipconfig`. Busca la "Dirección IPv4" (ejemplo: `192.168.3.50`). En la tablet, entra directo usando esa IP: `http://192.168.3.50/` y guárdala como marcador.
 
 ### ⚠️ Caso 3: "La impresora de cocina no imprime comandas"
-* **Causa A:** La IP configurada en `.env` no coincide con la IP actual de la impresora.
-  * *Solución:* Revisa qué IP tiene la impresora (enciéndela manteniendo presionado el botón FEED para que imprima su ticket de autodiagnóstico con su IP). Abre `.env` con el Bloc de Notas, pon `KITCHEN_PRINTER_IP=192.168.3.XXX`, guarda y ejecuta `docker compose restart api`.
-* **Causa B:** La impresora está conectada al repetidor de cocina y este tiene una subred distinta.
-  * *Solución:* Asegurarse de que la IP de la impresora empiece con `192.168.3.`.
+* **Causa A:** La IP configurada en `.env` no coincide con la IP actual de la impresora o el contenedor no se ha recompilado.
+  * *Solución:* La IP oficial de cocina en la red Huawei es `192.168.3.201` en el puerto `9100`. El código cuenta con fallback y protección ante subredes viejas. Si se modificó `.env`, ejecuta `ACTUALIZAR_SISTEMA.bat` para recompilar la API.
+* **Causa B:** La impresora física o el repetidor tienen el puerto 9100 trabado.
+  * *Solución:* Prueba el puerto desde CMD corriendo:
+    ```cmd
+    powershell -Command "Test-NetConnection -ComputerName 192.168.3.201 -Port 9100"
+    ```
+    Si `TcpTestSucceeded` es `False`, apaga la impresora de su botón físico 10 segundos y vuelve a encenderla.
+* **Causa C:** Windows 11 tiene la red como "Pública" y bloquea el tráfico de Docker.
+  * *Solución:* En Windows ve a *Configuración -> Red e Internet -> Wi-Fi/Ethernet* y cambia el perfil de red a **"Privada"**.
+* **Diagnóstico en Vivo de Comandas:**
+  * Abre una consola CMD en el servidor y ejecuta:
+    ```cmd
+    docker logs -f mrking_api
+    ```
+    Al pulsar el icono de reimpresión (🖨️) en la pantalla de Cocina (`http://mrking/kds`), verás en tiempo real el socket conectando, enviando los bytes y confirmando con `[SPOOLER] ✅ Impresión exitosa`.
 
 ### ⚠️ Caso 4: "La impresora de caja (USB) no imprime el ticket de cobro"
 * **Causa A:** El micro-relay de PowerShell no está activo.

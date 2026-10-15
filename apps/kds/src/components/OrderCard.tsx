@@ -29,11 +29,14 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order }) => {
     try {
       setIsPrinting(true);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      await fetch(`${API_BASE_URL}/orders/${order.id}/print-kitchen`, {
+      console.log(`[KDS] 🖨️ Solicitando reimpresión en cocina para orden #${order.id.slice(-6)}...`);
+      const res = await fetch(`${API_BASE_URL}/orders/${order.id}/print-kitchen`, {
         method: 'POST',
       });
+      const data = await res.json().catch(() => null);
+      console.log(`[KDS] 📡 Respuesta del servidor para orden #${order.id.slice(-6)}:`, data);
     } catch (error) {
-      console.error('Error sending to printer:', error);
+      console.error('[KDS] ❌ Error conectando con API para imprimir:', error);
     } finally {
       setTimeout(() => setIsPrinting(false), 2000);
     }

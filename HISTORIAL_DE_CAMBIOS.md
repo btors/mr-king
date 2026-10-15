@@ -3,6 +3,45 @@ Este documento registra de forma cronológica y técnica cada actualización, lo
 
 ---
 
+## 📅 14 de Octubre de 2026: Blindaje de Impresora de Cocina (192.168.3.201), Reimpresión Manual KDS y Logging en Vivo
+
+### 1. Objetivos del Cambio
+* **Blindaje de IP de Cocina (`192.168.3.201`):** Erradicar dependencias o variables de entorno obsoletas de redes anteriores (`192.168.0.x` o `192.168.1.x`) que bloqueaban la conexión TCP hacia la impresora térmica de cocina.
+* **Reimpresión Manual en Pantalla KDS:** Asegurar que al pulsar el icono de reimpresión (🖨️) en las tarjetas de la cocina, la orden se recupere de la base de datos y se envíe inmediatamente al spooler de red.
+* **Fallback Seguro de Comanda:** Evitar que órdenes con productos que carezcan de la categoría explícita `preparationPlace = KITCHEN` generen comandas vacías invisibles. Si no hay ítems marcados, el sistema imprime todos los ítems de la orden.
+* **Timeout y Diagnóstico en Vivo:** Aumentar el timeout del socket a 6 segundos con temporizador explícito y habilitar logging de alta visibilidad para monitorear en tiempo real con `docker logs -f mrking_api`.
+
+---
+
+### 2. Decisiones Técnicas y Arquitectura
+1. **Resolución Robusta de IP (`printer.service.ts`):**
+   - El servicio verifica la variable `KITCHEN_PRINTER_IP`. Si viene vacía o si contiene una subred vieja (`192.168.0.` o `192.168.1.`), automáticamente la descarta y fuerza la IP oficial de producción: `192.168.3.201` en el puerto `9100`.
+2. **Fallback de Ítems en Comanda (`printer.service.ts`):**
+   - En `formatKitchenTicket`, si el filtro `preparationPlace === 'KITCHEN'` resulta en 0 ítems pero la orden contiene productos, se toma la lista completa para garantizar que la cocina nunca se quede sin comanda.
+3. **Socket TCP Blindado (`printer.service.ts`):**
+   - Se añadió un `setTimeout` explícito de 6000ms que destruye el socket y rechaza la promesa limpiamente si la impresora tarda en responder el handshake a través de repetidores Wi-Fi.
+4. **Logs Extensivos en Todo el Flujo:**
+   - Logs con prefijos `[ORDERS_CONTROLLER]`, `[ORDERS_SERVICE]`, `[PRINTER]` y `[PRINTER RAW]` visibles directamente en consola al correr `docker logs -f mrking_api`.
+5. **Logging en Consola KDS (`OrderCard.tsx`):**
+   - La pantalla de cocina registra en la consola del navegador (`F12`) el envío y la respuesta del servidor al solicitar la reimpresión.
+
+---
+
+### 3. Archivos Modificados / A Sobrescribir en Producción
+```text
+📁 mr-king/
+├── .env                                         <-- KITCHEN_PRINTER_IP=192.168.3.201 y PORT=9100
+├── apps/
+│   ├── api/src/
+│   │   ├── printer/printer.service.ts           <-- IP blindada 192.168.3.201, timeout 6s, fallback y logs
+│   │   ├── orders/orders.controller.ts          <-- Logging explícito en printKitchen endpoint
+│   │   └── orders/orders.service.ts             <-- Logging y despacho seguro en printKitchenManual
+│   └── kds/src/
+│       └── components/OrderCard.tsx             <-- Logging en consola de KDS al presionar botón 🖨️
+```
+
+---
+
 ## 📅 12 de Octubre de 2026: Orilla de Salchicha, URL http://mrking/ y Erradicación de Órdenes Fantasma
 
 ### 1. Objetivos del Cambio
